@@ -46,6 +46,10 @@
 #include "py/cstack.h"
 #include "py/gc.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 #if MICROPY_VFS_ROM && MICROPY_VFS_ROM_IOCTL
 #include "extmod/vfs.h"
 #endif
@@ -194,6 +198,10 @@ void mp_init(void) {
     // Mount ROMFS if it exists.
     mp_vfs_mount_romfs_protected();
     #endif
+
+#ifdef USE_YK
+    mp_state_ctx.ykmt = yk_mt_new(NULL);
+#endif
 }
 
 void mp_deinit(void) {

@@ -29,6 +29,10 @@
 #include "py/obj.h"
 #include "py/bc.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 // These variables and functions glue the code emitters to the runtime.
 
 // Used with mp_raw_code_t::proto_fun_indicator to detect if a mp_proto_fun_t is a
@@ -76,6 +80,9 @@ typedef struct _mp_raw_code_t {
     uint8_t kind; // of type mp_raw_code_kind_t; only 3 bits used
     bool is_generator;
     const void *fun_data;
+#ifdef USE_YK
+    YkLocation *yklocs;
+#endif
     struct _mp_raw_code_t **children;
     #if MICROPY_PERSISTENT_CODE_SAVE
     uint32_t fun_data_len; // for mp_raw_code_save
@@ -127,6 +134,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     #if MICROPY_PERSISTENT_CODE_SAVE
     size_t len,
     uint16_t n_children,
+    #endif
+    #ifdef USE_YK
+    YkLocation *yklocs,
     #endif
     uint16_t scope_flags);
 

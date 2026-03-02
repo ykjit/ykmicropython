@@ -36,9 +36,29 @@
 #include "py/emit.h"
 #include "py/bc0.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 #if MICROPY_ENABLE_COMPILER
 
 #define DUMMY_DATA_SIZE (MP_ENCODE_UINT_MAX_BYTES)
+
+
+#ifdef USE_YK
+// Copied from vm.c
+#define DECODE_SLABEL \
+    size_t slab; \
+    do { \
+        if (ip[0] & 0x80) { \
+            slab = ((ip[0] & 0x7f) | (ip[1] << 7)) - 0x4000; \
+            ip += 2; \
+        } else { \
+            slab = ip[0] - 0x40; \
+            ip += 1; \
+        } \
+    } while (0)
+#endif
 
 struct _emit_t {
     // Accessed as mp_obj_t, so must be aligned as such, and we rely on the
@@ -400,12 +420,50 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
         #endif
         #endif
 
+#ifdef USE_YK
+        // If we are jitting, assign locations.
+        // XXX: figure out where to free this.
+        YkLocation *yklocs = m_new(YkLocation, bytecode_len);
+        // Initialise all positions with null locations to start with.
+        for (size_t idx = 0; idx < emit->code_info_size + emit->bytecode_size;
+             idx++) {
+          yklocs[idx] = yk_location_null();
+        }
+        // Then overwrite places traces can start with proper locations.
+        // XXX: instructions are variable length -- because here we simply bump
+        //      a pointer over bytes of the instruction stream, we may mistake
+        //      operands for opcodes and make false positive locations.
+        //      Possible solutions:
+        //
+        //       - cache pointers to bytecode start-points (presumably known
+        //         during parsing/bc compilation).
+        //
+        //       - duplicate decoding logic from vm.c to bump `pc` to skip over
+        //         bytecode operands.
+        //
+        //       - create locations earlier in the parser/bc compiler.
+        const byte *ip = emit->code_base + emit->code_info_size;
+        while (ip <
+               emit->code_base + emit->code_info_size + emit->bytecode_size) {
+          if (*ip++ == MP_BC_POP_JUMP_IF_TRUE) {
+            DECODE_SLABEL;
+            if ((mp_int_t)slab < 0) {
+              const byte *target_ip = ip + slab;
+              yklocs[target_ip - emit->code_base] = yk_location_new();
+              continue;
+            }
+          }
+        }
+#endif
         // Bytecode is finalised, assign it to the raw code object.
         mp_emit_glue_assign_bytecode(emit->scope->raw_code, emit->code_base,
             emit->emit_common->children,
             #if MICROPY_PERSISTENT_CODE_SAVE
             bytecode_len,
             emit->emit_common->ct_cur_child,
+            #endif
+            #ifdef USE_YK
+            yklocs,
             #endif
             emit->scope->scope_flags);
     }

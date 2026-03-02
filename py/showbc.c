@@ -150,16 +150,33 @@ void mp_bytecode_print(const mp_print_t *print, const mp_raw_code_t *rc, size_t 
             mp_printf(print, "  bc=" INT_FMT " line=" UINT_FMT "\n", bc, source_line);
         }
     }
+#ifdef USE_YK
+    mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm, rc->yklocs);
+#else
     mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm);
+#endif
 }
 
-const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start, const byte *ip, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm) {
+const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start, const byte *ip, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
+#ifdef USE_YK
+    , YkLocation *yklocs
+#endif
+        ) {
     #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
     const qstr_short_t *qstr_table = cm->qstr_table;
     #endif
     const mp_obj_t *obj_table = cm->obj_table;
     mp_uint_t unum;
     qstr qst;
+
+#ifdef USE_YK
+    mp_uint_t yklocidx = ip - ip_start;
+    if (!yk_location_is_null(yklocs[yklocidx])) {
+            mp_printf(print, "ykloc: ");
+    } else {
+            mp_printf(print, "       ");
+    }
+#endif
 
     switch (*ip++) {
         case MP_BC_LOAD_CONST_FALSE:
@@ -542,11 +559,20 @@ const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start,
     return ip;
 }
 
-void mp_bytecode_print2(const mp_print_t *print, const byte *ip, size_t len, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm) {
+void mp_bytecode_print2(const mp_print_t *print, const byte *ip, size_t len, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
+#ifdef USE_YK
+  ,YkLocation *yklocs
+#endif
+  )
+{
     const byte *ip_start = ip;
     while (ip < ip_start + len) {
         mp_printf(print, "%02u ", (uint)(ip - ip_start));
+#ifdef USE_YK
+        ip = mp_bytecode_print_str(print, ip_start, ip, child_table, cm, yklocs);
+#else
         ip = mp_bytecode_print_str(print, ip_start, ip, child_table, cm);
+#endif
         mp_printf(print, "\n");
     }
 }

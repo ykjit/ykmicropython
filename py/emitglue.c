@@ -67,11 +67,17 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     size_t len,
     uint16_t n_children,
     #endif
+    #ifdef USE_YK
+    YkLocation *yklocs,
+    #endif
     uint16_t scope_flags) {
 
     rc->kind = MP_CODE_BYTECODE;
     rc->is_generator = (scope_flags & MP_SCOPE_FLAG_GENERATOR) != 0;
     rc->fun_data = code;
+#ifdef USE_YK
+    rc->yklocs = yklocs;
+#endif
     rc->children = children;
 
     #if MICROPY_PERSISTENT_CODE_SAVE
@@ -227,7 +233,7 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
                 ((mp_obj_base_t *)MP_OBJ_TO_PTR(fun))->type = &mp_type_gen_wrap;
             }
 
-            #if MICROPY_PY_SYS_SETTRACE
+            #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
             mp_obj_fun_bc_t *self_fun = (mp_obj_fun_bc_t *)MP_OBJ_TO_PTR(fun);
             self_fun->rc = rc;
             #endif

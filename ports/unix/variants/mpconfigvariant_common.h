@@ -77,7 +77,16 @@
 #define MICROPY_MEM_STATS              (1)
 
 // Enable a small performance boost for the VM.
+#ifdef USE_YK
+#define MICROPY_OPT_COMPUTED_GOTO      (0)
+#else
 #define MICROPY_OPT_COMPUTED_GOTO      (1)
+#endif
+
+// yk stuff interferes with the stack checker.
+#ifdef USE_YK
+#define MICROPY_STACK_CHECK            (0)
+#endif
 
 // Return number of collected objects from gc.collect().
 #define MICROPY_PY_GC_COLLECT_RETVAL   (1)
