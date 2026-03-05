@@ -151,7 +151,9 @@ void mp_bytecode_print(const mp_print_t *print, const mp_raw_code_t *rc, size_t 
         }
     }
 #ifdef USE_YK
-    mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm, rc->yklocs);
+    // Pass a ptr to the location corresponding with the first non-header ip.
+    YkLocation *yklocs = rc->yklocs + prelude_size;
+    mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm, yklocs);
 #else
     mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm);
 #endif
