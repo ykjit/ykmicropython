@@ -47,6 +47,15 @@ INC +=  -I$(TOP)
 INC += -I$(BUILD)
 
 # compiler settings
+ifneq ($(strip $(YK_BUILD_TYPE)),)
+CC=		`yk-config ${YK_BUILD_TYPE} --cc`
+AR=		`yk-config ${YK_BUILD_TYPE} --ar` rcu
+RANLIB=		`yk-config ${YK_BUILD_TYPE} --ranlib`
+CFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --cflags --cppflags` -DUSE_YK
+LDFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --ldflags` \
+			`yk-config ${YK_BUILD_TYPE} --libs` -lm
+endif
+
 CWARN = -Wall -Werror
 CWARN += -Wextra -Wno-unused-parameter -Wpointer-arith -Wdouble-promotion -Wfloat-conversion
 CFLAGS += $(INC) $(CWARN) -std=gnu99 -DUNIX $(COPT) -I$(VARIANT_DIR) $(CFLAGS_EXTRA)
@@ -116,7 +125,11 @@ endif
 LDFLAGS_ARCH = -Wl,-map,$@.map -Wl,-dead_strip
 else
 # Use gcc syntax for map file
-LDFLAGS_ARCH = -Wl,-Map=$@.map,--cref -Wl,--gc-sections
+LDFLAGS_ARCH = -Wl,-Map=$@.map,--cref
+ifeq ($(strip $(YK_BUILD_TYPE)),)
+# Don't strip stackmaps section.
+LDFLAGS_ARCH += -Wl,--gc-sections
+endif
 endif
 LDFLAGS += $(LDFLAGS_MOD) $(LDFLAGS_ARCH) -lm $(LDFLAGS_EXTRA)
 

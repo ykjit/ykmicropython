@@ -36,6 +36,10 @@
 #include "py/bc0.h"
 #include "py/profile.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 // *FORMAT-OFF*
 
 #if 0
@@ -218,7 +222,6 @@ MP_NOINLINE static mp_obj_t *build_slice_stack_allocated(byte op, mp_obj_t *sp, 
 //  MP_VM_RETURN_YIELD, ip, sp valid, yielded value in *sp
 //  MP_VM_RETURN_EXCEPTION, exception in state[0]
 mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_code_state_t *code_state, volatile mp_obj_t inject_exc) {
-
 #define SELECTIVE_EXC_IP (0)
 // When disabled, code_state->ip is updated unconditionally during op
 // dispatch, and this is subsequently used in the exception handler
@@ -294,6 +297,10 @@ FRAME_SETUP();
     volatile int gil_divisor = MICROPY_PY_THREAD_GIL_VM_DIVISOR;
     #endif
 
+#ifdef USE_YK
+    YkLocation *yklocs = code_state->fun_bc->rc->yklocs;
+#endif
+
     // outer exception handling loop
     for (;;) {
         nlr_buf_t nlr;
@@ -329,6 +336,10 @@ dispatch_loop:
                 TRACE(ip);
                 MARK_EXC_IP_GLOBAL();
                 TRACE_TICK(ip, sp, false);
+#ifdef USE_YK
+                mp_uint_t locidx = ip - code_state->fun_bc->bytecode;
+                yk_mt_control_point(mp_state_ctx.ykmt, &yklocs[locidx]);
+#endif
                 switch (*ip++) {
                 #endif
 

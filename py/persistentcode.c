@@ -402,6 +402,9 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
             fun_data_len,
             n_children,
             #endif
+            #ifdef USE_YK
+            NULL,
+            #endif
             scope_flags);
 
     #if MICROPY_EMIT_INLINE_ASM || MICROPY_ENABLE_NATIVE_CODE
