@@ -1,0 +1,22 @@
+FROM debian:latest
+WORKDIR /ci
+RUN --mount=target=/var/lib/apt/lists,type=cache,sharing=locked \
+    --mount=target=/var/cache/apt,type=cache,sharing=locked \
+  rm -f /etc/apt/apt.conf.d/docker-clean && \
+  apt-get update && \
+  # Note: not using mold here, as the build fails with it.
+  apt-get -y install clang-17 make curl procps file git cmake python3 \
+    libtinfo-dev libzip-dev ninja-build gdb pipx rsync libffi-dev pkg-config \
+    shellcheck && \
+  update-alternatives --install /usr/bin/cc cc /usr/bin/clang-17 999 && \
+  update-alternatives --set cc /usr/bin/clang-17 && \
+  update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-17 999 && \
+  update-alternatives --set c++ /usr/bin/clang++-17 && \
+  ln -sf /usr/bin/clang-17 /usr/bin/clang && \
+  ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+ARG CI_UID
+RUN useradd -m -u ${CI_UID} ci && chown ${CI_UID}:${CI_UID} .
+ARG CI_RUNNER
+ENV CI_RUNNER=${CI_RUNNER}
+COPY --chown=${CI_UID}:${CI_UID} . .
+CMD ["sh", "-x", ".buildbot.sh"]
