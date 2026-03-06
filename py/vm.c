@@ -215,6 +215,17 @@ MP_NOINLINE static mp_obj_t *build_slice_stack_allocated(byte op, mp_obj_t *sp, 
 }
 #endif
 
+#ifdef USE_YK
+// Elide instruction lookup.
+//
+// FIXME: Can the bytecode be mutated? If so we would need to add and promote a
+// bytecode version tag (see yklua for an example).
+__attribute__((yk_idempotent))
+byte load_inst(const byte *pc) {
+  return *pc;
+}
+#endif
+
 // fastn has items in reverse order (fastn[0] is local[0], fastn[-1] is local[1], etc)
 // sp points to bottom of stack which grows up
 // returns:
@@ -339,8 +350,12 @@ dispatch_loop:
 #ifdef USE_YK
                 mp_uint_t locidx = ip - code_state->fun_bc->bytecode;
                 yk_mt_control_point(mp_state_ctx.ykmt, &yklocs[locidx]);
+                ip = (const byte *) yk_promote((void *) ip);
+                byte opcode = load_inst(ip++);
+#else
+                byte opcode = *ip++;
 #endif
-                switch (*ip++) {
+                switch (opcode) {
                 #endif
 
                 ENTRY(MP_BC_LOAD_CONST_FALSE):
