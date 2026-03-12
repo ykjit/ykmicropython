@@ -200,7 +200,7 @@ void mp_init(void) {
     #endif
 
 #ifdef USE_YK
-    mp_state_ctx.ykmt = yk_mt_new(NULL);
+    mp_state_ctx.vm.ykmt = yk_mt_new(NULL);
 #endif
 }
 
