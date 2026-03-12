@@ -28,6 +28,21 @@
 #include "py/runtime.h"
 #include "py/cstack.h"
 
+
+#ifdef USE_YK
+// This function finds the top of the C stack before the interpreter has
+// allocated on it.
+//
+// It's important that this function doesn't have a yk shadow stack frame or
+// get inlined into something which has one, otherwise `stack_dummy` could be
+// allocated onto the shadow stack. If we allowed this, then we haven't found
+// the top of the C stack at all!
+//
+// Annotating `yk_outline` is sufficient because:
+//  - the shadow stack pass skips `yk_outline` functions.
+//  - `yk_outline` implies `nolinline`, so it can't get inlined.
+__attribute__((yk_outline))
+#endif
 void mp_cstack_init_with_sp_here(size_t stack_size) {
     #if __GNUC__ >= 13
     #pragma GCC diagnostic push

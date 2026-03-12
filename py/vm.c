@@ -349,7 +349,7 @@ dispatch_loop:
                 TRACE_TICK(ip, sp, false);
 #ifdef USE_YK
                 mp_uint_t locidx = ip - code_state->fun_bc->bytecode;
-                yk_mt_control_point(mp_state_ctx.ykmt, &yklocs[locidx]);
+                yk_mt_control_point(mp_state_ctx.vm.ykmt, &yklocs[locidx]);
                 ip = (const byte *) yk_promote((void *) ip);
                 byte opcode = load_inst(ip++);
 #else

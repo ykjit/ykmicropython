@@ -269,6 +269,9 @@ typedef struct _mp_state_vm_t {
     // See mp_map_lookup.
     uint8_t map_lookup_cache[MICROPY_OPT_MAP_LOOKUP_CACHE_SIZE];
     #endif
+    #ifdef USE_YK
+    YkMT *ykmt;
+    #endif
 } mp_state_vm_t;
 
 // This structure holds state that is specific to a given thread. Everything
@@ -328,9 +331,6 @@ typedef struct _mp_state_ctx_t {
     mp_state_thread_t thread;
     mp_state_vm_t vm;
     mp_state_mem_t mem;
-#ifdef USE_YK
-    YkMT *ykmt;
-#endif
 } mp_state_ctx_t;
 
 extern mp_state_ctx_t mp_state_ctx;
