@@ -63,8 +63,8 @@
 #define DECODE_UINT \
     mp_uint_t unum = 0; \
     do { \
-        unum = (unum << 7) + (*ip & 0x7f); \
-    } while ((*ip++ & 0x80) != 0)
+        unum = (unum << 7) + (load_inst(ip) & 0x7f); \
+    } while ((load_inst(ip++) & 0x80) != 0)
 
 #define DECODE_ULABEL \
     size_t ulab; \
@@ -78,6 +78,18 @@
         } \
     } while (0)
 
+#define DECODE_ULABEL_LOAD_INST \
+    size_t ulab; \
+    do { \
+        if (load_inst(ip) & 0x80) { \
+            ulab = ((load_inst(ip) & 0x7f) | (load_inst(ip+1) << 7)); \
+            ip += 2; \
+        } else { \
+            ulab = load_inst(ip); \
+            ip += 1; \
+        } \
+    } while (0)
+
 #define DECODE_SLABEL \
     size_t slab; \
     do { \
@@ -86,6 +98,18 @@
             ip += 2; \
         } else { \
             slab = ip[0] - 0x40; \
+            ip += 1; \
+        } \
+    } while (0)
+
+#define DECODE_SLABEL_LOAD_INST \
+    size_t slab; \
+    do { \
+        if (load_inst(ip) & 0x80) { \
+            slab = ((load_inst(ip) & 0x7f) | (load_inst(ip+1) << 7)) - 0x4000; \
+            ip += 2; \
+        } else { \
+            slab = load_inst(ip) - 0x40; \
             ip += 1; \
         } \
     } while (0)
@@ -216,14 +240,18 @@ MP_NOINLINE static mp_obj_t *build_slice_stack_allocated(byte op, mp_obj_t *sp, 
 #endif
 
 #ifdef USE_YK
+#define NOOPT_VAL(X) asm volatile("" : "+r,m"(X) : : "memory");
 // Elide instruction lookup.
 //
 // FIXME: Can the bytecode be mutated? If so we would need to add and promote a
 // bytecode version tag (see yklua for an example).
 __attribute__((yk_idempotent))
 byte load_inst(const byte *pc) {
+  NOOPT_VAL(pc);
   return *pc;
 }
+#else
+#define load_inst(x) (*(x))
 #endif
 
 // fastn has items in reverse order (fastn[0] is local[0], fastn[-1] is local[1], etc)
@@ -378,13 +406,13 @@ dispatch_loop:
 
                 ENTRY(MP_BC_LOAD_CONST_SMALL_INT): {
                     mp_uint_t num = 0;
-                    if ((ip[0] & 0x40) != 0) {
+                    if ((load_inst(ip) & 0x40) != 0) {
                         // Number is negative
                         num--;
                     }
                     do {
-                        num = (num << 7) | (*ip & 0x7f);
-                    } while ((*ip++ & 0x80) != 0);
+                        num = (num << 7) | (load_inst(ip) & 0x7f);
+                    } while ((load_inst(ip++) & 0x80) != 0);
                     PUSH(MP_OBJ_NEW_SMALL_INT(num));
                     DISPATCH();
                 }
@@ -602,13 +630,13 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_JUMP): {
-                    DECODE_SLABEL;
+                    DECODE_SLABEL_LOAD_INST;
                     ip += slab;
                     DISPATCH_WITH_PEND_EXC_CHECK();
                 }
 
                 ENTRY(MP_BC_POP_JUMP_IF_TRUE): {
-                    DECODE_SLABEL;
+                    DECODE_SLABEL_LOAD_INST;
                     if (mp_obj_is_true(POP())) {
                         ip += slab;
                     }
@@ -616,7 +644,7 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_POP_JUMP_IF_FALSE): {
-                    DECODE_SLABEL;
+                    DECODE_SLABEL_LOAD_INST;
                     if (!mp_obj_is_true(POP())) {
                         ip += slab;
                     }
@@ -624,7 +652,7 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_JUMP_IF_TRUE_OR_POP): {
-                    DECODE_ULABEL;
+                    DECODE_ULABEL_LOAD_INST;
                     if (mp_obj_is_true(TOP())) {
                         ip += ulab;
                     } else {
@@ -634,7 +662,7 @@ dispatch_loop:
                 }
 
                 ENTRY(MP_BC_JUMP_IF_FALSE_OR_POP): {
-                    DECODE_ULABEL;
+                    DECODE_ULABEL_LOAD_INST;
                     if (mp_obj_is_true(TOP())) {
                         sp--;
                     } else {
@@ -712,9 +740,9 @@ dispatch_loop:
 
                 ENTRY(MP_BC_UNWIND_JUMP): {
                     MARK_EXC_IP_SELECTIVE();
-                    DECODE_SLABEL;
+                    DECODE_SLABEL_LOAD_INST;
                     PUSH((mp_obj_t)(mp_uint_t)(uintptr_t)(ip + slab)); // push destination ip for jump
-                    PUSH((mp_obj_t)(mp_uint_t)(*ip)); // push number of exception handlers to unwind (0x80 bit set if we also need to pop stack)
+                    PUSH((mp_obj_t)(mp_uint_t)(load_inst(ip))); // push number of exception handlers to unwind (0x80 bit set if we also need to pop stack)
 unwind_jump:;
                     mp_uint_t unum = (mp_uint_t)POP(); // get number of exception handlers to unwind
                     while ((unum & 0x7f) > 0) {
@@ -818,7 +846,7 @@ unwind_jump:;
                 ENTRY(MP_BC_FOR_ITER): {
                     FRAME_UPDATE();
                     MARK_EXC_IP_SELECTIVE();
-                    DECODE_ULABEL; // the jump offset if iteration finishes; for labels are always forward
+                    DECODE_ULABEL_LOAD_INST; // the jump offset if iteration finishes; for labels are always forward
                     code_state->sp = sp;
                     mp_obj_t obj;
                     if (*(sp - MP_OBJ_ITER_BUF_NSLOTS + 1) == MP_OBJ_NULL) {
@@ -845,7 +873,7 @@ unwind_jump:;
                 ENTRY(MP_BC_POP_EXCEPT_JUMP): {
                     assert(exc_sp >= exc_stack);
                     POP_EXC_BLOCK();
-                    DECODE_ULABEL;
+                    DECODE_ULABEL_LOAD_INST;
                     ip += ulab;
                     DISPATCH_WITH_PEND_EXC_CHECK();
                 }
@@ -893,18 +921,18 @@ unwind_jump:;
                 ENTRY(MP_BC_BUILD_SLICE): {
                     MARK_EXC_IP_SELECTIVE();
                     mp_obj_t step = mp_const_none;
-                    if (*ip++ == 3) {
+                    if (load_inst(ip++) == 3) {
                         // 3-argument slice includes step
                         step = POP();
                     }
-                    if ((*ip == MP_BC_LOAD_SUBSCR || *ip == MP_BC_STORE_SUBSCR)
+                    if ((load_inst(ip) == MP_BC_LOAD_SUBSCR || load_inst(ip) == MP_BC_STORE_SUBSCR)
                         && (mp_obj_get_type(sp[-2])->flags & MP_TYPE_FLAG_SUBSCR_ALLOWS_STACK_SLICE)) {
                         // Fast path optimisation for when the BUILD_SLICE is immediately followed
                         // by a LOAD/STORE_SUBSCR for an accepting type, to avoid needing to allocate
                         // the slice on the heap.  In some cases (e.g. a[1:3] = x) this can result
                         // in no allocations at all.  We can't do this for instance types because
                         // the get/set/delattr implementation may keep a reference to the slice.
-                        byte op = *ip++;
+                        byte op = load_inst(ip++);
                         sp = build_slice_stack_allocated(op, sp - 2, step);
                     } else {
                         mp_obj_t stop = POP();
@@ -966,7 +994,7 @@ unwind_jump:;
 
                 ENTRY(MP_BC_MAKE_CLOSURE): {
                     DECODE_PTR;
-                    size_t n_closed_over = *ip++;
+                    size_t n_closed_over = load_inst(ip++);
                     // Stack layout: closed_overs <- TOS
                     sp -= n_closed_over - 1;
                     SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, n_closed_over, sp));
@@ -975,7 +1003,7 @@ unwind_jump:;
 
                 ENTRY(MP_BC_MAKE_CLOSURE_DEFARGS): {
                     DECODE_PTR;
-                    size_t n_closed_over = *ip++;
+                    size_t n_closed_over = load_inst(ip++);
                     // Stack layout: def_tuple def_dict closed_overs <- TOS
                     sp -= 2 + n_closed_over - 1;
                     SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, 0x100 | n_closed_over, sp));
@@ -1311,27 +1339,27 @@ yield:
 
                 #if MICROPY_OPT_COMPUTED_GOTO
                 ENTRY(MP_BC_LOAD_CONST_SMALL_INT_MULTI):
-                    PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)ip[-1] - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
+                    PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)load_inst(ip-1) - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
                     DISPATCH();
 
                 ENTRY(MP_BC_LOAD_FAST_MULTI):
-                    obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)ip[-1]];
+                    obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)load_inst(ip-1)];
                     goto load_check;
 
                 ENTRY(MP_BC_STORE_FAST_MULTI):
-                    fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
+                    fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)load_inst(ip-1)] = POP();
                     DISPATCH();
 
                 ENTRY(MP_BC_UNARY_OP_MULTI):
                     MARK_EXC_IP_SELECTIVE();
-                    SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
+                    SET_TOP(mp_unary_op(load_inst(ip-1) - MP_BC_UNARY_OP_MULTI, TOP()));
                     DISPATCH();
 
                 ENTRY(MP_BC_BINARY_OP_MULTI): {
                     MARK_EXC_IP_SELECTIVE();
                     mp_obj_t rhs = POP();
                     mp_obj_t lhs = TOP();
-                    SET_TOP(mp_binary_op(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs));
+                    SET_TOP(mp_binary_op(load_inst(ip-1) - MP_BC_BINARY_OP_MULTI, lhs, rhs));
                     DISPATCH();
                 }
 
@@ -1339,22 +1367,22 @@ yield:
                     MARK_EXC_IP_SELECTIVE();
                 #else
                 ENTRY_DEFAULT:
-                    if (ip[-1] < MP_BC_LOAD_CONST_SMALL_INT_MULTI + MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM) {
-                        PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)ip[-1] - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
+                    if (load_inst(ip-1) < MP_BC_LOAD_CONST_SMALL_INT_MULTI + MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM) {
+                        PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)load_inst(ip-1) - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_LOAD_FAST_MULTI + MP_BC_LOAD_FAST_MULTI_NUM) {
-                        obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)ip[-1]];
+                    } else if (load_inst(ip-1) < MP_BC_LOAD_FAST_MULTI + MP_BC_LOAD_FAST_MULTI_NUM) {
+                        obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)load_inst(ip-1)];
                         goto load_check;
-                    } else if (ip[-1] < MP_BC_STORE_FAST_MULTI + MP_BC_STORE_FAST_MULTI_NUM) {
-                        fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
+                    } else if (load_inst(ip-1) < MP_BC_STORE_FAST_MULTI + MP_BC_STORE_FAST_MULTI_NUM) {
+                        fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)load_inst(ip-1)] = POP();
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_UNARY_OP_MULTI + MP_BC_UNARY_OP_MULTI_NUM) {
-                        SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
+                    } else if (load_inst(ip-1) < MP_BC_UNARY_OP_MULTI + MP_BC_UNARY_OP_MULTI_NUM) {
+                        SET_TOP(mp_unary_op(load_inst(ip-1) - MP_BC_UNARY_OP_MULTI, TOP()));
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_BINARY_OP_MULTI + MP_BC_BINARY_OP_MULTI_NUM) {
+                    } else if (load_inst(ip-1) < MP_BC_BINARY_OP_MULTI + MP_BC_BINARY_OP_MULTI_NUM) {
                         mp_obj_t rhs = POP();
                         mp_obj_t lhs = TOP();
-                        SET_TOP(mp_binary_op(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs));
+                        SET_TOP(mp_binary_op(load_inst(ip-1) - MP_BC_BINARY_OP_MULTI, lhs, rhs));
                         DISPATCH();
                     } else
                 #endif // MICROPY_OPT_COMPUTED_GOTO
