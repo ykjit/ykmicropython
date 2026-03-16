@@ -424,10 +424,28 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
         // If we are jitting, assign locations.
         // XXX: figure out where to free this.
         YkLocation *yklocs = m_new(YkLocation, bytecode_len);
+#ifdef YKMP_DEBUG_STRS
+        // XXX: figure out where to free this.
+        char **ykdstrs = m_new(char *, bytecode_len);
+#endif
+
         // Initialise all positions with null locations to start with.
         for (size_t idx = 0; idx < emit->code_info_size + emit->bytecode_size;
              idx++) {
           yklocs[idx] = yk_location_null();
+
+#ifdef YKMP_DEBUG_STRS
+          if (idx >= emit->code_info_size) {
+              size_t bcoff = idx - emit->code_info_size;
+              char *dstr;
+              // XXX Figure out where to free these allocations.
+              if (asprintf(&dstr, "PC=%zu", bcoff) == -1) {
+                  mp_raise_msg(&mp_type_RuntimeError,
+                          MP_ERROR_TEXT("asprintf failed"));
+              }
+              ykdstrs[idx] = dstr;
+          }
+#endif
         }
         // Then overwrite places traces can start with proper locations.
         // XXX: instructions are variable length -- because here we simply bump
@@ -450,6 +468,10 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
             if ((mp_int_t)slab < 0) {
               const byte *target_ip = ip + slab;
               yklocs[target_ip - emit->code_base] = yk_location_new();
+#ifdef YKMP_DEBUG_STRS
+              yk_location_set_debug_str(&yklocs[target_ip - emit->code_base],
+                      ykdstrs[target_ip - emit->code_base]);
+#endif
               continue;
             }
           }
@@ -464,6 +486,9 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
             #endif
             #ifdef USE_YK
             yklocs,
+            #ifdef YKMP_DEBUG_STRS
+            ykdstrs,
+            #endif
             #endif
             emit->scope->scope_flags);
     }

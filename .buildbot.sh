@@ -78,3 +78,9 @@ cd ..
 
 YK_BUILD_TYPE=release-with-asserts make -j "$(nproc)" V=1
 # FIXME: add tests once upstream test has been fixed. See above.
+
+# Check it builds with debug strings.
+make clean
+YK_BUILD_TYPE=release-with-asserts make -j "$(nproc)" V=1 \
+    CFLAGS_EXTRA=-DYKMP_DEBUG_STRS=1
+# FIXME: add tests once upstream test has been fixed. See above.

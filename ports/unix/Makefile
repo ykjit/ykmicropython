@@ -47,12 +47,15 @@ INC +=  -I$(TOP)
 INC += -I$(BUILD)
 
 # compiler settings
-ifneq ($(strip $(YK_BUILD_TYPE)),)
+ifeq ($(strip $(YK_BUILD_TYPE)),)
+YK_CFLAGS=
+YK_LDFLAGS=
+else
 CC=		`yk-config ${YK_BUILD_TYPE} --cc`
 AR=		`yk-config ${YK_BUILD_TYPE} --ar` rcu
 RANLIB=		`yk-config ${YK_BUILD_TYPE} --ranlib`
-CFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --cflags --cppflags` -DUSE_YK
-LDFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --ldflags` \
+CFLAGS+=	`yk-config ${YK_BUILD_TYPE} --cflags --cppflags` -DUSE_YK
+LDFLAGS+=	`yk-config ${YK_BUILD_TYPE} --ldflags` \
 			`yk-config ${YK_BUILD_TYPE} --libs` -lm
 endif
 

@@ -69,6 +69,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     #endif
     #ifdef USE_YK
     YkLocation *yklocs,
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs,
+    #endif
     #endif
     uint16_t scope_flags) {
 
@@ -77,6 +80,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     rc->fun_data = code;
 #ifdef USE_YK
     rc->yklocs = yklocs;
+#ifdef YKMP_DEBUG_STRS
+    rc->ykdstrs = ykdstrs;
+#endif
 #endif
     rc->children = children;
 

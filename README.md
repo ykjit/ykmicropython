@@ -21,8 +21,11 @@ $ make submodules
 Then to build with yk support, do:
 
 ```
-PATH=/path/to/yk/bin:$PATH YK_BUILD_TYPE=<debug|release|...> V=1
+PATH=/path/to/yk/bin:$PATH YK_BUILD_TYPE=<debug|release|...> make V=1
 ```
+
+ (To build with yk debug string support, add
+ `CFLAGS_EXTRA="-DYKMP_DEBUG_STRS=1"` at the end of the `make` invocation)
 
 Then the vm executable can be found at `./build-standard/micropython`.
 

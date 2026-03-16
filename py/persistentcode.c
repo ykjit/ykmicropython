@@ -404,6 +404,9 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
             #endif
             #ifdef USE_YK
             NULL,
+            #ifdef YKMP_DEBUG_STRS
+            NULL,
+            #endif
             #endif
             scope_flags);
 

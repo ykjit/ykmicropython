@@ -82,6 +82,9 @@ typedef struct _mp_raw_code_t {
     const void *fun_data;
 #ifdef USE_YK
     YkLocation *yklocs;
+#ifdef YKMP_DEBUG_STRS
+    char **ykdstrs;
+#endif
 #endif
     struct _mp_raw_code_t **children;
     #if MICROPY_PERSISTENT_CODE_SAVE
@@ -137,6 +140,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     #endif
     #ifdef USE_YK
     YkLocation *yklocs,
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs,
+    #endif
     #endif
     uint16_t scope_flags);
 
