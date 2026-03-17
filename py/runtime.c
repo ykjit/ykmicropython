@@ -207,6 +207,10 @@ void mp_init(void) {
 void mp_deinit(void) {
     MP_THREAD_GIL_EXIT();
 
+#ifdef USE_YK
+    yk_mt_shutdown(mp_state_ctx.vm.ykmt);
+#endif
+
     // call port specific deinitialization if any
     #ifdef MICROPY_PORT_DEINIT_FUNC
     MICROPY_PORT_DEINIT_FUNC;
