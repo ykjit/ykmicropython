@@ -385,7 +385,12 @@ mp_obj_t mp_unary_op(mp_unary_op_t op, mp_obj_t arg) {
     }
 }
 
-mp_obj_t MICROPY_WRAP_MP_BINARY_OP(mp_binary_op)(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+// NOTE: this annotation makes bigloop and CLBG fannkuch Python3 #8 faster, but
+// makes Laurie's LLM-generated mandelbrot benchmark slower.
+#ifdef USE_YK
+__attribute__((yk_unroll_safe))
+#endif
+mp_obj_t mp_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
     DEBUG_OP_printf("binary " UINT_FMT " %q %p %p\n", op, mp_binary_op_method_name[op], lhs, rhs);
 
     // TODO correctly distinguish inplace operators for mutable objects
