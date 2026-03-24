@@ -206,12 +206,6 @@ static void gc_helper_get_regs(gc_helper_regs_t arr) {
 
 #endif // MICROPY_GCREGS_SETJMP
 
-#ifdef USE_YK
-void gc_collect_shadowstack(void *start, void *end) {
-    gc_collect_root(start, ((intptr_t) end - (intptr_t) start) / sizeof(void *));
-}
-#endif
-
 // Explicitly mark this as noinline to make sure the regs variable
 // is effectively at the top of the stack: otherwise, in builds where
 // LTO is enabled and a lot of inlining takes place we risk a stack
@@ -225,13 +219,10 @@ MP_NOINLINE void gc_helper_collect_regs_and_stack(void) {
     gc_collect_root(regs_ptr, ((uintptr_t)MP_STATE_THREAD(stack_top) - (uintptr_t)&regs) / sizeof(uintptr_t));
 
 #ifdef USE_YK
-    // Now scan the shadow stack.
-    //
-    // FIXME: this will scan the shadow stacks of *all* threads, but we should
-    // probably only scan the current thread's shadow stack here. yk doesn't
-    // currently have provide an API (e.g. a `yk_curthread_sstack_bounds()`)
-    // that could enable this.
-    yk_foreach_shadowstack(gc_collect_shadowstack);
+    // Now scan our thread's shadow stack.
+    void *start = NULL, *end = NULL;
+    yk_thread_shadowstack_bounds(&start, &end);
+    gc_collect_root((void **)start, ((intptr_t) end - (intptr_t) start) / sizeof(void *));
 #endif
 }
 
