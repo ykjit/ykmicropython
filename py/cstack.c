@@ -55,6 +55,10 @@ void mp_cstack_init_with_sp_here(size_t stack_size) {
     #endif
 }
 
+#ifdef USE_YK
+// For this function to work properly, it must not have a shadow stack.
+__attribute__((yk_outline))
+#endif
 mp_uint_t mp_cstack_usage(void) {
     // Assumes descending stack
     volatile int stack_dummy;
