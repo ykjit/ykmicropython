@@ -27,6 +27,9 @@
 
 #include <string.h>
 #include <assert.h>
+#ifdef USE_YK
+#include <stdlib.h>
+#endif
 
 #include "py/emitglue.h"
 #include "py/objcode.h"
@@ -270,7 +273,18 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
     #if MICROPY_ENABLE_PYSTACK
     code_state = mp_pystack_alloc(offsetof(mp_code_state_t, state) + state_size);
     #else
+#ifdef USE_YK
+    // Avoid alloca(3) when using yk.
+    //
+    // Fucntions that use alloca(3) cannot be traced because stackmaps don't
+    // work on dynamically-sized frames.
+    //
+    // Instead of storing "small" code states on the stack (using alloca), we
+    // therefore store *all* code states on the GC heap.
+    {
+#else
     if (state_size > VM_MAX_STATE_ON_STACK) {
+#endif
         code_state = m_new_obj_var_maybe(mp_code_state_t, state, byte, state_size);
         #if MICROPY_DEBUG_VM_STACK_OVERFLOW
         if (code_state != NULL) {
@@ -279,11 +293,15 @@ static mp_obj_t fun_bc_call(mp_obj_t self_in, size_t n_args, size_t n_kw, const 
         #endif
     }
     if (code_state == NULL) {
+#ifdef USE_YK
+        abort(); // we must have heap allocated
+#else
         code_state = alloca(offsetof(mp_code_state_t, state) + state_size);
         #if MICROPY_DEBUG_VM_STACK_OVERFLOW
         memset(code_state->state, 0, state_size);
         #endif
         state_size = 0; // indicate that we allocated using alloca
+#endif
     }
     #endif
 
