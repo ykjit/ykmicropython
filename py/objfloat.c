@@ -138,6 +138,9 @@ static mp_obj_t float_make_new(const mp_obj_type_t *type_in, size_t n_args, size
     }
 }
 
+#ifdef USE_YK
+__attribute__((yk_indirect_inline))
+#endif
 static mp_obj_t float_unary_op(mp_unary_op_t op, mp_obj_t o_in) {
     mp_float_t val = mp_obj_float_get(o_in);
     switch (op) {
@@ -161,6 +164,9 @@ static mp_obj_t float_unary_op(mp_unary_op_t op, mp_obj_t o_in) {
     }
 }
 
+#ifdef USE_YK
+__attribute__((yk_indirect_inline))
+#endif
 static mp_obj_t float_binary_op(mp_binary_op_t op, mp_obj_t lhs_in, mp_obj_t rhs_in) {
     mp_float_t lhs_val = mp_obj_float_get(lhs_in);
     #if MICROPY_PY_BUILTINS_COMPLEX
