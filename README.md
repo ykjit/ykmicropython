@@ -14,6 +14,7 @@ first run the initial setup commands:
 
 ```
 $ apt install build-essential git python3 pkg-config libffi-dev # e.g. for debian
+$ cd ports/unix
 $ make -C ../../mpy-cross
 $ make submodules
 ```
