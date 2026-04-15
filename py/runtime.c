@@ -400,7 +400,7 @@ mp_obj_t mp_binary_op_contains(mp_obj_t lhs, mp_obj_t rhs) {
 }
 
 #ifdef USE_YK
-__attribute__((yk_indirect_inline, yk_unroll_safe))
+__attribute__((yk_indirect_inline, yk_unroll))
 #endif
 mp_obj_t mp_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
     DEBUG_OP_printf("binary " UINT_FMT " %q %p %p\n", op, mp_binary_op_method_name[op], lhs, rhs);
