@@ -425,11 +425,7 @@ dispatch_loop:
 
                 ENTRY(MP_BC_LOAD_CONST_OBJ): {
                     DECODE_OBJ;
-#ifdef USE_YK
-                    PUSH(yk_promote(obj));
-#else
                     PUSH(obj);
-#endif
                     DISPATCH();
                 }
 
