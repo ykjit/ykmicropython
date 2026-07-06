@@ -463,7 +463,16 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
         const byte *ip = emit->code_base + emit->code_info_size;
         while (ip <
                emit->code_base + emit->code_info_size + emit->bytecode_size) {
-          if (*ip++ == MP_BC_POP_JUMP_IF_TRUE) {
+          byte op = *ip++;
+          // Backward jumps are loop back-edges:
+          //   - MP_BC_POP_JUMP_IF_TRUE -  branch to signed offset if truthy.
+          //   - MP_BC_POP_JUMP_IF_FALSE - branch to signed offset if falsy.
+          //   - MP_BC_JUMP - unconditional branch to signed offset.
+          // `while` loops close with POP_JUMP_IF_TRUE (or POP_JUMP_IF_FALSE
+          // for negated conditions); generic `for` loops close with an
+          // unconditional JUMP back to FOR_ITER.
+          if (op == MP_BC_POP_JUMP_IF_TRUE || op == MP_BC_POP_JUMP_IF_FALSE ||
+              op == MP_BC_JUMP) {
             DECODE_SLABEL;
             if ((mp_int_t)slab < 0) {
               const byte *target_ip = ip + slab;
