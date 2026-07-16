@@ -30,6 +30,13 @@ PATH=/path/to/yk/bin:$PATH YK_BUILD_TYPE=<debug|release|...> make V=1
 
 Then the vm executable can be found at `./build-standard/micropython`.
 
+### Using `just`
+
+```shell
+$ just yk_path=/path/to/yk yk_build_type=debug build
+$ just clean
+```
+
 ## yk-related tips
 
  - run `micropython` with `-v -v -v` to see the program's bytecode annotated
