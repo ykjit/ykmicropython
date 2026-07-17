@@ -10,7 +10,7 @@ default:
 # Build ports/unix with the given yk toolchain on PATH.
 # Example: just yk_path=/path/to/yk yk_build_type=release build
 build:
-    PATH="{{yk_path}}/bin:$PATH" YK_BUILD_TYPE={{yk_build_type}} make -C ports/unix V=1
+    PATH="{{yk_path}}/bin:$PATH" YK_BUILD_TYPE={{yk_build_type}} make -C ports/unix -j $(nproc) V=1
 
 # Remove build artifacts.
 clean:
