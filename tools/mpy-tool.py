@@ -946,7 +946,17 @@ class RawCode(object):
         generate_minimal = self.code_kind == MP_CODE_BYTECODE and empty_children
 
         if generate_minimal:
-            print("#if MICROPY_PERSISTENT_CODE_SAVE")
+            print("#if MICROPY_PERSISTENT_CODE_SAVE || defined(USE_YK)")
+
+        if self.code_kind == MP_CODE_BYTECODE:
+            # Static zero-initialisation produces yk_location_null() values,
+            # while retaining mutable storage for yk_mt_control_point().
+            print("#ifdef USE_YK")
+            print(
+                "static YkLocation yklocs_%s[sizeof(fun_data_%s)];"
+                % (self.escaped_name, self.escaped_name)
+            )
+            print("#endif")
 
         print("static const %s proto_fun_%s = {" % (raw_code_type, self.escaped_name))
         print("    .proto_fun_indicator[0] = MP_PROTO_FUN_INDICATOR_RAW_CODE_0,")
@@ -954,6 +964,10 @@ class RawCode(object):
         print("    .kind = %s," % RawCode.code_kind_str[self.code_kind])
         print("    .is_generator = %d," % bool(self.scope_flags & MP_SCOPE_FLAG_GENERATOR))
         print("    .fun_data = fun_data_%s," % self.escaped_name)
+        if self.code_kind == MP_CODE_BYTECODE:
+            print("    #ifdef USE_YK")
+            print("    .yklocs = yklocs_%s," % self.escaped_name)
+            print("    #endif")
         if len(self.children):
             print("    .children = (void *)&children_%s," % self.escaped_name)
         elif prelude_ptr:

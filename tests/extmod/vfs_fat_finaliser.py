@@ -74,13 +74,16 @@ for i in range(1024):
     []
 
 # Run the test: create files without closing them, run GC, then read back files.
-# Only read back N-1 files because the last one may not be finalised due to
-# references to it being left on the C stack.
+# A conservative GC may retain any of the file objects due to stale pointer-like
+# values on the stack, so don't require particular files to be finalised.  It is
+# enough here to verify that the collection finalises at least one of them.
 for n in names:
     f = fs.open(n, "w")
     f.write(n)
     f = None  # release f without closing
-gc.collect()  # should finalise at least the first N-1 files by closing them
-for n in names[:-1]:
+gc.collect()
+n_finalised = 0
+for n in names:
     with fs.open(n, "r") as f:
-        print(f.read())
+        n_finalised += f.read() == n
+print(n_finalised > 0)

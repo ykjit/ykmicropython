@@ -217,6 +217,13 @@ MP_NOINLINE void gc_helper_collect_regs_and_stack(void) {
     // GC stack (and regs because we captured them)
     void **regs_ptr = (void **)(void *)&regs;
     gc_collect_root(regs_ptr, ((uintptr_t)MP_STATE_THREAD(stack_top) - (uintptr_t)&regs) / sizeof(uintptr_t));
+
+#ifdef USE_YK
+    // Now scan our thread's shadow stack.
+    void *start = NULL, *end = NULL;
+    yk_thread_shadowstack_bounds(&start, &end);
+    gc_collect_root((void **)start, ((intptr_t) end - (intptr_t) start) / sizeof(void *));
+#endif
 }
 
 #endif // MICROPY_ENABLE_GC

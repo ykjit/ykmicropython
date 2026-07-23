@@ -36,6 +36,10 @@
 #include "py/objlist.h"
 #include "py/objexcept.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 // This file contains structures defining the state of the MicroPython
 // memory system, runtime and virtual machine.  The state is a global
 // variable, but in the future it is hoped that the state can become local.
@@ -267,6 +271,9 @@ typedef struct _mp_state_vm_t {
     #if MICROPY_OPT_MAP_LOOKUP_CACHE
     // See mp_map_lookup.
     uint8_t map_lookup_cache[MICROPY_OPT_MAP_LOOKUP_CACHE_SIZE];
+    #endif
+    #ifdef USE_YK
+    YkMT *ykmt;
     #endif
 } mp_state_vm_t;
 

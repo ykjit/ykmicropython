@@ -76,8 +76,17 @@
 #define MICROPY_MALLOC_USES_ALLOCATED_SIZE (1)
 #define MICROPY_MEM_STATS              (1)
 
+#ifdef USE_YK
+// Incompatible with yk.
+#define MICROPY_OPT_COMPUTED_GOTO      (0)
+#else
 // Enable a small performance boost for the VM.
 #define MICROPY_OPT_COMPUTED_GOTO      (1)
+#endif
+
+#ifdef USE_YK
+#define MICROPY_NLR_SETJMP (1)
+#endif
 
 // Return number of collected objects from gc.collect().
 #define MICROPY_PY_GC_COLLECT_RETVAL   (1)

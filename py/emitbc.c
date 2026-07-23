@@ -36,9 +36,14 @@
 #include "py/emit.h"
 #include "py/bc0.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 #if MICROPY_ENABLE_COMPILER
 
 #define DUMMY_DATA_SIZE (MP_ENCODE_UINT_MAX_BYTES)
+
 
 struct _emit_t {
     // Accessed as mp_obj_t, so must be aligned as such, and we rely on the
@@ -400,12 +405,22 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
         #endif
         #endif
 
+#ifdef USE_YK
+        // If we are jitting, assign locations.
+        // XXX: figure out where to free this.
+        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(bytecode_len, emit->code_base, emit->code_info_size, emit->bytecode_size);
+        // TODO: identify safe trace heads using proper bytecode decoding and
+        // replace their null locations with locations from yk_location_new().
+#endif
         // Bytecode is finalised, assign it to the raw code object.
         mp_emit_glue_assign_bytecode(emit->scope->raw_code, emit->code_base,
             emit->emit_common->children,
             #if MICROPY_PERSISTENT_CODE_SAVE
             bytecode_len,
             emit->emit_common->ct_cur_child,
+            #endif
+            #ifdef USE_YK
+            yklocs,
             #endif
             emit->scope->scope_flags);
     }

@@ -35,6 +35,9 @@
 #include "py/mphal.h"
 #include "py/runtime0.h"
 #include "py/bc.h"
+#ifdef USE_YK
+#include "py/bc0.h"
+#endif
 #include "py/objfun.h"
 #include "py/profile.h"
 
@@ -61,17 +64,89 @@ mp_raw_code_t *mp_emit_glue_new_raw_code(void) {
     return rc;
 }
 
+#ifdef USE_YK
+typedef struct _mp_yk_opcode_t {
+    uint8_t opcode;
+    uint8_t size;
+    mp_int_t arg;
+} mp_yk_opcode_t;
+
+static mp_yk_opcode_t mp_yk_opcode_decode(const byte *ip) {
+    const byte *ip_start = ip;
+    uint8_t opcode = *ip++;
+    uint8_t opcode_format = MP_BC_FORMAT(opcode);
+    mp_uint_t arg = 0;
+    if (opcode_format == MP_BC_FORMAT_QSTR || opcode_format == MP_BC_FORMAT_VAR_UINT) {
+        arg = *ip & 0x7f;
+        if (opcode == MP_BC_LOAD_CONST_SMALL_INT && (arg & 0x40) != 0)
+            arg |= (mp_uint_t)(-1) << 7;
+        while ((*ip & 0x80) != 0)
+            arg = (arg << 7) | (*++ip & 0x7f);
+        ++ip;
+    } else if (opcode_format == MP_BC_FORMAT_OFFSET) {
+        if ((*ip & 0x80) == 0) {
+            arg = *ip++;
+            if (MP_BC_UNWIND_JUMP <= opcode && opcode <= MP_BC_POP_JUMP_IF_FALSE)
+                arg -= 0x40;
+        } else {
+            arg = (ip[0] & 0x7f) | (ip[1] << 7);
+            ip += 2;
+            if (MP_BC_UNWIND_JUMP <= opcode && opcode <= MP_BC_POP_JUMP_IF_FALSE)
+                arg -= 0x4000;
+        }
+    }
+    if ((opcode & MP_BC_MASK_EXTRA_BYTE) == 0)
+        ++ip;
+
+    mp_yk_opcode_t op = { opcode, ip - ip_start, arg };
+    return op;
+}
+
+YkLocation *mp_emit_glue_alloc_yk_locations(size_t bytecode_len, const byte *code_base,
+    size_t code_info_size, size_t bytecode_size) {
+    YkLocation *yklocs = m_new(YkLocation, bytecode_len);
+
+    // Initialise all positions with null locations to start with.
+    for (size_t idx = 0; idx < bytecode_len; idx++)
+        yklocs[idx] = yk_location_null();
+    // Then overwrite places traces can start with proper locations.
+    const byte *ip = code_base + code_info_size;
+    const byte *bytecode_end = ip + bytecode_size;
+    while (ip < bytecode_end) {
+        mp_yk_opcode_t op = mp_yk_opcode_decode(ip);
+        ip += op.size;
+        if ((op.opcode == MP_BC_POP_JUMP_IF_TRUE
+            || op.opcode == MP_BC_POP_JUMP_IF_FALSE
+            || op.opcode == MP_BC_JUMP)
+            && op.arg < 0) {
+            mp_int_t target_offset = (ip - code_base) + op.arg;
+            if ((mp_uint_t)target_offset >= code_info_size
+                && (mp_uint_t)target_offset < code_info_size + bytecode_size) {
+                yklocs[target_offset] = yk_location_new();
+            }
+        }
+    }
+    return yklocs;
+}
+#endif
+
 void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     mp_raw_code_t **children,
     #if MICROPY_PERSISTENT_CODE_SAVE
     size_t len,
     uint16_t n_children,
     #endif
+    #ifdef USE_YK
+    YkLocation *yklocs,
+    #endif
     uint16_t scope_flags) {
 
     rc->kind = MP_CODE_BYTECODE;
     rc->is_generator = (scope_flags & MP_SCOPE_FLAG_GENERATOR) != 0;
     rc->fun_data = code;
+#ifdef USE_YK
+    rc->yklocs = yklocs;
+#endif
     rc->children = children;
 
     #if MICROPY_PERSISTENT_CODE_SAVE
@@ -183,7 +258,9 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
     // def_kw_args must be MP_OBJ_NULL or a dict
     assert(def_args == NULL || def_args[1] == MP_OBJ_NULL || mp_obj_is_type(def_args[1], &mp_type_dict));
 
-    #if MICROPY_MODULE_FROZEN_MPY || MICROPY_PY_FUNCTION_ATTRS_CODE
+    // USE_YK requires every bytecode function to retain its raw-code metadata,
+    // in particular its mutable location table.
+    #if (MICROPY_MODULE_FROZEN_MPY || MICROPY_PY_FUNCTION_ATTRS_CODE) && !defined(USE_YK)
     if (mp_proto_fun_is_bytecode(proto_fun)) {
         const uint8_t *bc = proto_fun;
         mp_obj_t fun = mp_obj_new_fun_bc(def_args, bc, context, NULL);
@@ -227,7 +304,7 @@ mp_obj_t mp_make_function_from_proto_fun(mp_proto_fun_t proto_fun, const mp_modu
                 ((mp_obj_base_t *)MP_OBJ_TO_PTR(fun))->type = &mp_type_gen_wrap;
             }
 
-            #if MICROPY_PY_SYS_SETTRACE
+            #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
             mp_obj_fun_bc_t *self_fun = (mp_obj_fun_bc_t *)MP_OBJ_TO_PTR(fun);
             self_fun->rc = rc;
             #endif

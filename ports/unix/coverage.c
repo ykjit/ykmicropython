@@ -675,8 +675,12 @@ static mp_obj_t extra_coverage(void) {
         fun_bc.context = &context;
         fun_bc.child_table = NULL;
         fun_bc.bytecode = (const byte *)"\x01"; // just needed for n_state
-        #if MICROPY_PY_SYS_SETTRACE
+        #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
         struct _mp_raw_code_t rc = {};
+        #ifdef USE_YK
+        YkLocation yklocs[] = {yk_location_null()};
+        rc.yklocs = yklocs;
+        #endif
         fun_bc.rc = &rc;
         #endif
         mp_code_state_t *code_state = m_new_obj_var(mp_code_state_t, state, mp_obj_t, 1);
