@@ -57,6 +57,10 @@
 #include "stack_size.h"
 #include "shared/runtime/pyexec.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 // Command line options, with their defaults
 bool mp_compile_only = false;
 static uint emit_opt = MP_EMIT_OPT_NONE;
@@ -442,6 +446,10 @@ int main(int argc, char **argv) {
 
     // Define a reasonable stack limit to detect stack overflow.
     mp_uint_t stack_size = 40000 * UNIX_STACK_MULTIPLIER;
+
+#ifdef USE_YK
+    yk_init();
+#endif
 
     // We should capture stack top ASAP after start, and it should be
     // captured guaranteedly before any other stack variables are allocated.

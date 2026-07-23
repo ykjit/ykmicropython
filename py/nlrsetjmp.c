@@ -30,7 +30,11 @@
 
 void nlr_jump(void *val) {
     MP_NLR_JUMP_HEAD(val, top);
+    #ifdef USE_YK
+    yk_longjmp(top->jmpbuf, 1);
+    #else
     longjmp(top->jmpbuf, 1);
+    #endif
 }
 
 #endif

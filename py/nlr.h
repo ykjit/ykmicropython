@@ -134,6 +134,11 @@ struct _nlr_buf_t {
     #if MICROPY_ENABLE_PYSTACK
     void *pystack;
     #endif
+
+    #ifdef USE_YK
+    // Callback-list boundary from when this NLR frame was pushed.
+    struct _nlr_jump_callback_node_t *nlr_jump_callback_top;
+    #endif
 };
 
 typedef void (*nlr_jump_callback_fun_t)(void *ctx);

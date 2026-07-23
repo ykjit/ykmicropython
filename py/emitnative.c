@@ -93,7 +93,18 @@
 #define SIZEOF_NLR_BUF (2 + mp_dynamic_compiler.nlr_buf_num_regs + 1) // the +1 is conservative in case MICROPY_ENABLE_PYSTACK enabled
 #else
 #define SIZEOF_NLR_BUF (sizeof(nlr_buf_t) / sizeof(uintptr_t))
+
+#ifndef N_NLR_SETJMP
+#define N_NLR_SETJMP MICROPY_NLR_SETJMP
 #endif
+#endif
+
+#if N_NLR_SETJMP
+#define NLR_SETJMP_EXTRA_SLOTS (1)
+#else
+#define NLR_SETJMP_EXTRA_SLOTS (0)
+#endif
+
 #define SIZEOF_CODE_STATE (sizeof(mp_code_state_native_t) / sizeof(uintptr_t))
 #define OFFSETOF_CODE_STATE_STATE (offsetof(mp_code_state_native_t, state) / sizeof(uintptr_t))
 #define OFFSETOF_CODE_STATE_FUN_BC (offsetof(mp_code_state_native_t, fun_bc) / sizeof(uintptr_t))
@@ -138,10 +149,11 @@
 
 // Indices within the local C stack for various variables
 #define LOCAL_IDX_EXC_VAL(emit) (NLR_BUF_IDX_RET_VAL)
-#define LOCAL_IDX_EXC_HANDLER_PC(emit) (NLR_BUF_IDX_LOCAL_1)
-#define LOCAL_IDX_EXC_HANDLER_UNWIND(emit) (SIZEOF_NLR_BUF + 1) // this needs a dedicated variable outside nlr_buf_t
-#define LOCAL_IDX_THROW_VAL(emit) (SIZEOF_NLR_BUF + 2) // needs a dedicated variable outside nlr_buf_t, following inject_exc in py/vm.c
-#define LOCAL_IDX_RET_VAL(emit) (SIZEOF_NLR_BUF) // needed when NEED_GLOBAL_EXC_HANDLER is true
+#define SIZEOF_NLR_BUF_WITH_HANDLER (SIZEOF_NLR_BUF + NLR_SETJMP_EXTRA_SLOTS)
+#define LOCAL_IDX_EXC_HANDLER_PC(emit) (NLR_SETJMP_EXTRA_SLOTS ? SIZEOF_NLR_BUF : NLR_BUF_IDX_LOCAL_1)
+#define LOCAL_IDX_RET_VAL(emit) (SIZEOF_NLR_BUF_WITH_HANDLER) // needed when NEED_GLOBAL_EXC_HANDLER is true
+#define LOCAL_IDX_EXC_HANDLER_UNWIND(emit) (SIZEOF_NLR_BUF_WITH_HANDLER + 1) // this needs a dedicated variable outside nlr_buf_t
+#define LOCAL_IDX_THROW_VAL(emit) (SIZEOF_NLR_BUF_WITH_HANDLER + 2) // needs a dedicated variable outside nlr_buf_t, following inject_exc in py/vm.c
 #define LOCAL_IDX_FUN_OBJ(emit) ((emit)->code_state_start + OFFSETOF_CODE_STATE_FUN_BC)
 #define LOCAL_IDX_OLD_GLOBALS(emit) ((emit)->code_state_start + OFFSETOF_CODE_STATE_IP)
 #define LOCAL_IDX_GEN_PC(emit) ((emit)->code_state_start + OFFSETOF_CODE_STATE_IP)
@@ -461,7 +473,7 @@ static void emit_native_start_pass(emit_t *emit, pass_kind_t pass, scope_t *scop
     // Work out start of code state (mp_code_state_native_t or reduced version for viper)
     emit->code_state_start = 0;
     if (NEED_GLOBAL_EXC_HANDLER(emit)) {
-        emit->code_state_start = SIZEOF_NLR_BUF; // for nlr_buf_t
+        emit->code_state_start = SIZEOF_NLR_BUF_WITH_HANDLER; // for nlr_buf_t and optional exception-handler PC
         emit->code_state_start += 1;  // for return_value
         if (NEED_THROW_VAL(emit)) {
             emit->code_state_start += 2;

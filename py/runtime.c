@@ -46,6 +46,10 @@
 #include "py/cstack.h"
 #include "py/gc.h"
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 #if MICROPY_VFS_ROM && MICROPY_VFS_ROM_IOCTL
 #include "extmod/vfs.h"
 #endif
@@ -198,10 +202,18 @@ void mp_init(void) {
     // Mount ROMFS if it exists.
     mp_vfs_mount_romfs_protected();
     #endif
+
+#ifdef USE_YK
+    mp_state_ctx.vm.ykmt = yk_mt_new(NULL);
+#endif
 }
 
 void mp_deinit(void) {
     MP_THREAD_GIL_EXIT();
+
+#ifdef USE_YK
+    yk_mt_shutdown(mp_state_ctx.vm.ykmt);
+#endif
 
     // call port specific deinitialization if any
     #ifdef MICROPY_PORT_DEINIT_FUNC

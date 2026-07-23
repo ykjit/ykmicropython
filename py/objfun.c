@@ -374,6 +374,9 @@ void mp_obj_fun_bc_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
             #error "MICROPY_PERSISTENT_CODE_SAVE can't be enabled at this level of MICROPY_PY_BUILTINS_CODE"
             #endif
             mp_proto_fun_t proto_fun;
+            #ifdef USE_YK
+            proto_fun = self->rc;
+            #else
             if (self->child_table != NULL) {
                 mp_raw_code_truncated_t *rc = m_new0(mp_raw_code_truncated_t, 1);
                 rc->kind = MP_CODE_BYTECODE;
@@ -384,6 +387,7 @@ void mp_obj_fun_bc_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
             } else {
                 proto_fun = self->bytecode;
             }
+            #endif
             dest[0] = mp_obj_new_code(self->context->constants, proto_fun);
             #else
             dest[0] = mp_obj_new_code(self->context, self->rc, true);
@@ -440,6 +444,12 @@ mp_obj_t mp_obj_new_fun_bc(const mp_obj_t *def_args, const byte *code, const mp_
     }
     mp_obj_fun_bc_t *o = mp_obj_malloc_var(mp_obj_fun_bc_t, extra_args, mp_obj_t, n_extra_args, &mp_type_fun_bc);
     o->bytecode = code;
+
+    #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
+    // mp_make_function_from_proto_fun fills this before publishing the object.
+    o->rc = NULL;
+    #endif
+
     o->context = context;
     o->child_table = child_table;
     if (def_pos_args != NULL) {

@@ -395,12 +395,21 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
     if (kind == MP_CODE_BYTECODE) {
         const byte *ip = fun_data;
         MP_BC_PRELUDE_SIG_DECODE(ip);
+        MP_BC_PRELUDE_SIZE_DECODE(ip);
+        #ifdef USE_YK
+        size_t code_info_size = (ip - fun_data) + n_info + n_cell;
+        size_t bytecode_size = fun_data_len - code_info_size;
+        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(fun_data_len, fun_data, code_info_size, bytecode_size);
+        #endif
         // Assign bytecode to raw code object
         mp_emit_glue_assign_bytecode(rc, fun_data,
             children,
             #if MICROPY_PERSISTENT_CODE_SAVE
             fun_data_len,
             n_children,
+            #endif
+            #ifdef USE_YK
+            yklocs,
             #endif
             scope_flags);
 

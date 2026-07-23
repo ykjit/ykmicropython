@@ -41,6 +41,9 @@ unsigned int nlr_push_tail(nlr_buf_t *nlr) {
     nlr_buf_t **top = &MP_STATE_THREAD(nlr_top);
     nlr->prev = *top;
     MP_NLR_SAVE_PYSTACK(nlr);
+    #ifdef USE_YK
+    nlr->nlr_jump_callback_top = MP_STATE_THREAD(nlr_jump_callback_top);
+    #endif
     *top = nlr;
     return 0; // normal return
 }
@@ -66,6 +69,17 @@ void nlr_pop_jump_callback(bool run_callback) {
     }
 }
 
+#ifdef USE_YK
+// This function pops and runs all callbacks that were registered after `nlr`
+// was pushed (via nlr_push). This version of the function is adapted for yk
+// and does not try and compare C and shadow stack addresses.
+void nlr_call_jump_callbacks(nlr_buf_t *nlr) {
+    nlr_jump_callback_node_t **top = &MP_STATE_THREAD(nlr_jump_callback_top);
+    while (*top != nlr->nlr_jump_callback_top) {
+        nlr_pop_jump_callback(true);
+    }
+}
+#else
 // This function pops and runs all callbacks that were registered after `nlr`
 // was pushed (via nlr_push).  It assumes:
 //  - a descending C stack,
@@ -79,6 +93,7 @@ void nlr_call_jump_callbacks(nlr_buf_t *nlr) {
         nlr_pop_jump_callback(true);
     }
 }
+#endif
 
 #if MICROPY_ENABLE_VM_ABORT
 MP_NORETURN void nlr_jump_abort(void) {
