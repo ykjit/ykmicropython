@@ -52,6 +52,9 @@ CC=		`yk-config ${YK_BUILD_TYPE} --cc`
 AR=		`yk-config ${YK_BUILD_TYPE} --ar` rcu
 RANLIB=		`yk-config ${YK_BUILD_TYPE} --ranlib`
 CFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --cflags --cppflags` -DUSE_YK
+ifdef YKMP_DEBUG_STRS
+CFLAGS_EXTRA+=	-DYKMP_DEBUG_STRS=1
+endif
 LDFLAGS_EXTRA+=	`yk-config ${YK_BUILD_TYPE} --ldflags` \
 			`yk-config ${YK_BUILD_TYPE} --libs` -lm
 endif

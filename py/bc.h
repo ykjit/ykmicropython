@@ -282,18 +282,24 @@ mp_vm_return_kind_t mp_execute_bytecode(mp_code_state_t *code_state,
 mp_code_state_t *mp_obj_fun_bc_prepare_codestate(mp_obj_t func, size_t n_args, size_t n_kw, const mp_obj_t *args);
 void mp_setup_code_state(mp_code_state_t *code_state, size_t n_args, size_t n_kw, const mp_obj_t *args);
 void mp_setup_code_state_native(mp_code_state_native_t *code_state, size_t n_args, size_t n_kw, const mp_obj_t *args);
+#if MICROPY_DEBUG_PRINTERS
 void mp_bytecode_print(const mp_print_t *print, const struct _mp_raw_code_t *rc, size_t fun_data_len, const mp_module_constants_t *cm);
 void mp_bytecode_print2(const mp_print_t *print, const byte *ip, size_t len, struct _mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
 #ifdef USE_YK
 , YkLocation *yklocs
 #endif
 );
+#endif
+#if MICROPY_DEBUG_PRINTERS || defined(YKMP_DEBUG_STRS)
 const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start, const byte *ip, struct _mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
 #ifdef USE_YK
     , YkLocation *yklocs
 #endif
         );
+#endif
+#if MICROPY_DEBUG_PRINTERS
 #define mp_bytecode_print_inst(print, code, x_table) mp_bytecode_print2(print, code, 1, x_table)
+#endif
 
 // Helper macros to access pointer with least significant bits holding flags
 #define MP_TAGPTR_PTR(x) ((void *)((uintptr_t)(x) & ~((uintptr_t)3)))

@@ -102,18 +102,62 @@ static mp_yk_opcode_t mp_yk_opcode_decode(const byte *ip) {
     return op;
 }
 
+#ifdef YKMP_DEBUG_STRS
+static char *mp_yk_debug_str(qstr source_file, const byte *line_info,
+    const byte *line_info_top, size_t bytecode_offset, const byte *bytecode_start,
+    const byte *ip, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm) {
+    vstr_t vstr;
+    mp_print_t print;
+    vstr_init_print(&vstr, 64, &print);
+    vstr_printf(&vstr, "%s:%u: ", qstr_str(source_file),
+        (unsigned)mp_bytecode_get_source_line(line_info, line_info_top, bytecode_offset));
+    mp_bytecode_print_str(&print, bytecode_start, ip, child_table, cm, NULL);
+
+    size_t dstr_size = vstr.len + 1;
+    char *dstr = m_new(char, dstr_size);
+    memcpy(dstr, vstr_null_terminated_str(&vstr), dstr_size);
+    vstr_clear(&vstr);
+    return dstr;
+}
+#endif
+
 YkLocation *mp_emit_glue_alloc_yk_locations(size_t bytecode_len, const byte *code_base,
-    size_t code_info_size, size_t bytecode_size) {
+    size_t code_info_size, size_t bytecode_size
+    #ifdef YKMP_DEBUG_STRS
+    , qstr source_file, mp_raw_code_t *const *child_table,
+    const mp_module_constants_t *cm, char ***ykdstrs
+    #endif
+    ) {
     YkLocation *yklocs = m_new(YkLocation, bytecode_len);
 
     // Initialise all positions with null locations to start with.
     for (size_t idx = 0; idx < bytecode_len; idx++)
         yklocs[idx] = yk_location_null();
+    #ifdef YKMP_DEBUG_STRS
+    const byte *line_info = NULL;
+    const byte *line_info_top = NULL;
+    *ykdstrs = m_new0(char *, bytecode_len);
+    const byte *prelude_ip = code_base;
+    MP_BC_PRELUDE_SIG_DECODE(prelude_ip);
+    MP_BC_PRELUDE_SIZE_DECODE(prelude_ip);
+    line_info_top = prelude_ip + n_info;
+    for (size_t idx = 0; idx < 1 + n_pos_args + n_kwonly_args; ++idx)
+        prelude_ip = mp_decode_uint_skip(prelude_ip);
+    line_info = prelude_ip;
+    #endif
     // Then overwrite places traces can start with proper locations.
     const byte *ip = code_base + code_info_size;
     const byte *bytecode_end = ip + bytecode_size;
     while (ip < bytecode_end) {
+        #ifdef YKMP_DEBUG_STRS
+        size_t instruction_offset = ip - code_base;
+        #endif
         mp_yk_opcode_t op = mp_yk_opcode_decode(ip);
+        #ifdef YKMP_DEBUG_STRS
+        (*ykdstrs)[instruction_offset] = mp_yk_debug_str(source_file,
+            line_info, line_info_top, instruction_offset - code_info_size,
+            code_base + code_info_size, ip, child_table, cm);
+        #endif
         ip += op.size;
         if ((op.opcode == MP_BC_POP_JUMP_IF_TRUE
             || op.opcode == MP_BC_POP_JUMP_IF_FALSE
@@ -122,7 +166,12 @@ YkLocation *mp_emit_glue_alloc_yk_locations(size_t bytecode_len, const byte *cod
             mp_int_t target_offset = (ip - code_base) + op.arg;
             if ((mp_uint_t)target_offset >= code_info_size
                 && (mp_uint_t)target_offset < code_info_size + bytecode_size) {
-                yklocs[target_offset] = yk_location_new();
+                if (yk_location_is_null(yklocs[target_offset])) {
+                    yklocs[target_offset] = yk_location_new();
+                    #ifdef YKMP_DEBUG_STRS
+                    yk_location_set_debug_str(&yklocs[target_offset], (*ykdstrs)[target_offset]);
+                    #endif
+                }
             }
         }
     }
@@ -138,6 +187,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     #endif
     #ifdef USE_YK
     YkLocation *yklocs,
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs,
+    #endif
     #endif
     uint16_t scope_flags) {
 
@@ -146,6 +198,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     rc->fun_data = code;
 #ifdef USE_YK
     rc->yklocs = yklocs;
+    #ifdef YKMP_DEBUG_STRS
+    rc->ykdstrs = ykdstrs;
+    #endif
 #endif
     rc->children = children;
 

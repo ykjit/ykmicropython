@@ -301,6 +301,9 @@ FRAME_SETUP();
     assert(code_state->fun_bc->rc != NULL);
     assert(code_state->fun_bc->rc->yklocs != NULL);
     YkLocation *yklocs = code_state->fun_bc->rc->yklocs;
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs = code_state->fun_bc->rc->ykdstrs;
+    #endif
 #endif
 
     // outer exception handling loop
@@ -341,6 +344,10 @@ dispatch_loop:
 #ifdef USE_YK
                 mp_uint_t locidx = ip - code_state->fun_bc->bytecode;
                 yk_mt_control_point(mp_state_ctx.vm.ykmt, &yklocs[locidx]);
+                #ifdef YKMP_DEBUG_STRS
+                assert(ykdstrs[locidx] != NULL);
+                yk_debug_str(ykdstrs[locidx]);
+                #endif
 #endif
                 switch (*ip++) {
                 #endif

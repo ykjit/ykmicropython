@@ -399,7 +399,21 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
         #ifdef USE_YK
         size_t code_info_size = (ip - fun_data) + n_info + n_cell;
         size_t bytecode_size = fun_data_len - code_info_size;
-        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(fun_data_len, fun_data, code_info_size, bytecode_size);
+        #ifdef YKMP_DEBUG_STRS
+        char **ykdstrs;
+        #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
+        qstr source_file = context->constants.qstr_table[0];
+        #else
+        qstr source_file = context->constants.source_file;
+        #endif
+        #endif
+        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(fun_data_len,
+            fun_data, code_info_size, bytecode_size
+            #ifdef YKMP_DEBUG_STRS
+            , source_file, children,
+            &context->constants, &ykdstrs
+            #endif
+            );
         #endif
         // Assign bytecode to raw code object
         mp_emit_glue_assign_bytecode(rc, fun_data,
@@ -410,6 +424,9 @@ static mp_raw_code_t *load_raw_code(mp_reader_t *reader, mp_module_context_t *co
             #endif
             #ifdef USE_YK
             yklocs,
+            #ifdef YKMP_DEBUG_STRS
+            ykdstrs,
+            #endif
             #endif
             scope_flags);
 

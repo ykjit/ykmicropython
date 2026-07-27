@@ -398,7 +398,7 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
             mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("bytecode overflow"));
         }
 
-        #if MICROPY_PERSISTENT_CODE_SAVE || MICROPY_DEBUG_PRINTERS
+        #if MICROPY_PERSISTENT_CODE_SAVE || MICROPY_DEBUG_PRINTERS || defined(USE_YK)
         size_t bytecode_len = emit->code_info_size + emit->bytecode_size;
         #if MICROPY_DEBUG_PRINTERS
         emit->scope->raw_code_data_len = bytecode_len;
@@ -408,9 +408,37 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
 #ifdef USE_YK
         // If we are jitting, assign locations.
         // XXX: figure out where to free this.
-        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(bytecode_len, emit->code_base, emit->code_info_size, emit->bytecode_size);
         // TODO: identify safe trace heads using proper bytecode decoding and
         // replace their null locations with locations from yk_location_new().
+        #ifdef YKMP_DEBUG_STRS
+        char **ykdstrs;
+        mp_module_constants_t constants = {
+            .obj_table = emit->emit_common->const_obj_list.items,
+        };
+        #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
+        size_t n_qstr = emit->emit_common->qstr_map.used;
+        qstr_short_t *qstr_table = m_new(qstr_short_t, n_qstr);
+        for (size_t i = 0; i < emit->emit_common->qstr_map.alloc; ++i) {
+            if (mp_map_slot_is_filled(&emit->emit_common->qstr_map, i)) {
+                size_t idx = MP_OBJ_SMALL_INT_VALUE(emit->emit_common->qstr_map.table[i].value);
+                qstr_table[idx] = MP_OBJ_QSTR_VALUE(emit->emit_common->qstr_map.table[i].key);
+            }
+        }
+        constants.qstr_table = qstr_table;
+        #else
+        constants.source_file = emit->emit_common->source_file;
+        #endif
+        #endif
+        YkLocation *yklocs = mp_emit_glue_alloc_yk_locations(bytecode_len,
+            emit->code_base, emit->code_info_size, emit->bytecode_size
+            #ifdef YKMP_DEBUG_STRS
+            , emit->emit_common->source_file, emit->emit_common->children,
+            &constants, &ykdstrs
+            #endif
+            );
+        #if defined(YKMP_DEBUG_STRS) && MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
+        m_del(qstr_short_t, qstr_table, n_qstr);
+        #endif
 #endif
         // Bytecode is finalised, assign it to the raw code object.
         mp_emit_glue_assign_bytecode(emit->scope->raw_code, emit->code_base,
@@ -421,6 +449,9 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
             #endif
             #ifdef USE_YK
             yklocs,
+            #ifdef YKMP_DEBUG_STRS
+            ykdstrs,
+            #endif
             #endif
             emit->scope->scope_flags);
     }

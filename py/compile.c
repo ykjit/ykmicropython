@@ -216,6 +216,9 @@ bool mp_compile_allow_top_level_await = false;
 // These are defined here so they can be inlined, to reduce code size.
 
 static void mp_emit_common_init(mp_emit_common_t *emit, qstr source_file) {
+    #ifdef YKMP_DEBUG_STRS
+    emit->source_file = source_file;
+    #endif
     #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
     mp_map_init(&emit->qstr_map, 1);
 
