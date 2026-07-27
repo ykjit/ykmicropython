@@ -30,7 +30,7 @@
 #include "py/bc0.h"
 #include "py/emitglue.h"
 
-#if MICROPY_DEBUG_PRINTERS
+#if MICROPY_DEBUG_PRINTERS || defined(YKMP_DEBUG_STRS)
 
 #define DECODE_UINT { \
         unum = 0; \
@@ -83,6 +83,7 @@
     DECODE_UINT; \
     unum = (mp_uint_t)obj_table[unum]
 
+#if MICROPY_DEBUG_PRINTERS
 void mp_bytecode_print(const mp_print_t *print, const mp_raw_code_t *rc, size_t fun_data_len, const mp_module_constants_t *cm) {
     const byte *ip_start = rc->fun_data;
     const byte *ip = rc->fun_data;
@@ -159,6 +160,8 @@ void mp_bytecode_print(const mp_print_t *print, const mp_raw_code_t *rc, size_t 
     mp_bytecode_print2(print, ip, fun_data_len - prelude_size, rc->children, cm);
 #endif
 }
+
+#endif
 
 const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start, const byte *ip, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
 #ifdef USE_YK
@@ -557,6 +560,7 @@ const byte *mp_bytecode_print_str(const mp_print_t *print, const byte *ip_start,
     return ip;
 }
 
+#if MICROPY_DEBUG_PRINTERS
 void mp_bytecode_print2(const mp_print_t *print, const byte *ip, size_t len, mp_raw_code_t *const *child_table, const mp_module_constants_t *cm
 #ifdef USE_YK
   ,YkLocation *yklocs
@@ -574,5 +578,6 @@ void mp_bytecode_print2(const mp_print_t *print, const byte *ip, size_t len, mp_
         mp_printf(print, "\n");
     }
 }
+#endif
 
-#endif // MICROPY_DEBUG_PRINTERS
+#endif // MICROPY_DEBUG_PRINTERS || defined(YKMP_DEBUG_STRS)

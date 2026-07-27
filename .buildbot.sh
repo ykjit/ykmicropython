@@ -63,6 +63,9 @@ YK_BUILD_TYPE=release-with-asserts make -j "$(nproc)" -C ../../mpy-cross V=1
 YK_BUILD_TYPE=release-with-asserts make submodules V=1
 YKD_SERIALISE_COMPILATION=1 YK_BUILD_TYPE=release-with-asserts make -j "$(nproc)" test V=1
 
+# Check debugstring support builds.
+YK_BUILD_TYPE=release-with-asserts YKMP_DEBUG_STRS=1 make -j "$(nproc)" BUILD=build-debugstrs V=1
+
 # Check that a couple of bigger benchmarks run correctly
 cd "$base"
 git clone --depth=1 --filter=blob:none https://github.com/ykjit/yk-benchmarks/

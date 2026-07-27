@@ -100,6 +100,9 @@ typedef struct _mp_emit_common_t {
     mp_map_t qstr_map;
     #endif
     mp_obj_list_t const_obj_list;
+    #ifdef YKMP_DEBUG_STRS
+    qstr source_file;
+    #endif
 } mp_emit_common_t;
 
 typedef struct _mp_emit_method_table_id_ops_t {

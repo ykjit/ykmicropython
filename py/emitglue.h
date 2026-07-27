@@ -33,6 +33,10 @@
 #include <yk.h>
 #endif
 
+#if defined(YKMP_DEBUG_STRS) && !defined(USE_YK)
+#error "YKMP_DEBUG_STRS requires USE_YK"
+#endif
+
 // These variables and functions glue the code emitters to the runtime.
 
 // Used with mp_raw_code_t::proto_fun_indicator to detect if a mp_proto_fun_t is a
@@ -82,6 +86,9 @@ typedef struct _mp_raw_code_t {
     const void *fun_data;
 #ifdef USE_YK
     YkLocation *yklocs;
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs;
+    #endif
 #endif
     struct _mp_raw_code_t **children;
     #if MICROPY_PERSISTENT_CODE_SAVE
@@ -115,6 +122,9 @@ typedef struct _mp_raw_code_truncated_t {
     const void *fun_data;
     #ifdef USE_YK
     YkLocation *yklocs;
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs;
+    #endif
     #endif
     struct _mp_raw_code_t **children;
     #if MICROPY_PERSISTENT_CODE_SAVE
@@ -134,7 +144,12 @@ mp_raw_code_t *mp_emit_glue_new_raw_code(void);
 
 #ifdef USE_YK
 YkLocation *mp_emit_glue_alloc_yk_locations(size_t bytecode_len, const byte *code_base,
-    size_t code_info_size, size_t bytecode_size);
+    size_t code_info_size, size_t bytecode_size
+    #ifdef YKMP_DEBUG_STRS
+    , qstr source_file, mp_raw_code_t *const *child_table,
+    const mp_module_constants_t *cm, char ***ykdstrs_out
+    #endif
+    );
 #endif
 
 void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
@@ -145,6 +160,9 @@ void mp_emit_glue_assign_bytecode(mp_raw_code_t *rc, const byte *code,
     #endif
     #ifdef USE_YK
     YkLocation *yklocs,
+    #ifdef YKMP_DEBUG_STRS
+    char **ykdstrs,
+    #endif
     #endif
     uint16_t scope_flags);
 
