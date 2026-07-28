@@ -378,7 +378,13 @@ bool mp_emit_bc_end_pass(emit_t *emit) {
         // calculate size of total code-info + bytecode, in bytes
         emit->code_info_size = emit->code_info_offset;
         emit->bytecode_size = emit->bytecode_offset;
+#ifdef USE_YK
+        // We add 3 bytes padding to ensure that load_ip_uint32 can't read past
+        // the end of the object.
+        emit->code_base = m_new0(byte, emit->code_info_size + emit->bytecode_size + 3);
+#else
         emit->code_base = m_new0(byte, emit->code_info_size + emit->bytecode_size);
+#endif
 
     } else if (emit->pass == MP_PASS_EMIT) {
         // Code info and/or bytecode can shrink during this pass.

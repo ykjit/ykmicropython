@@ -60,6 +60,54 @@
 // top element.
 // Exception stack also grows up, top element is also pointed at.
 
+#ifdef USE_YK
+// Optimise the common case that the small int is in the second byte of
+// `ip_word`: only multi-byte numbers will go around the body of the `while`
+// loop.
+#define DECODE_UINT \
+    mp_uint_t unum; \
+    do { \
+        uint8_t byte = (uint8_t)(ip_word >> 8); \
+        unum = byte & 0x7f; \
+        ++ip; \
+        while (byte & 0x80) { \
+            byte = load_ip_uint8(ip++); \
+            unum = (unum << 7) | (byte & 0x7f); \
+        } \
+    } while (0)
+
+#define DECODE_ULABEL_FROM_MEM \
+    size_t ulab; \
+    do { \
+        if (ip[0] & 0x80) { \
+            ulab = ((ip[0] & 0x7f) | (ip[1] << 7)); \
+            ip += 2; \
+        } else { \
+            ulab = ip[0]; \
+            ip += 1; \
+        } \
+    } while (0)
+
+#define DECODE_ULABEL \
+    size_t ulab; \
+    do { \
+        size_t has_second = (size_t)((ip_word >> 15) & 1); \
+        ulab = (size_t)((ip_word >> 8) & UINT64_C(0x7f)); \
+        ulab |= (size_t)(((ip_word >> 16) & UINT64_C(0xff)) << 7) \
+            * has_second; \
+        ip += 1 + has_second; \
+    } while (0)
+
+#define DECODE_SLABEL \
+    size_t slab; \
+    do { \
+        size_t has_second = (size_t)((ip_word >> 15) & 1); \
+        slab = (size_t)((ip_word >> 8) & 0x7f); \
+        slab |= (size_t)(((ip_word >> 16) & 0xff) << 7) * has_second; \
+        slab -= (size_t)0x40 + has_second * (size_t)0x3fc0; \
+        ip += 1 + has_second; \
+    } while (0)
+#else
 #define DECODE_UINT \
     mp_uint_t unum = 0; \
     do { \
@@ -89,6 +137,7 @@
             ip += 1; \
         } \
     } while (0)
+#endif
 
 #if MICROPY_EMIT_BYTECODE_USES_QSTR_TABLE
 
@@ -212,6 +261,25 @@ MP_NOINLINE static mp_obj_t *build_slice_stack_allocated(byte op, mp_obj_t *sp, 
         sp -= 2;
     }
     return sp;
+}
+#endif
+
+#ifdef USE_YK
+#define NOOPT_VAL(X) asm volatile("" : "+r,m"(X) : : "memory");
+// Idempotent load of an 8-bit value at address `ip`.
+__attribute__((yk_idempotent))
+uint8_t load_ip_uint8(const byte *ip) {
+    NOOPT_VAL(ip);
+    return *ip;
+}
+
+// Idempotent load of a 32-bit value at the (possibly unaligned) address `ip`.
+// That means that the byte after `ip` must be addressable. Furthermore this
+// assumes a little endian view of the world.
+__attribute__((yk_idempotent))
+uint32_t load_ip_uint32(const byte *ip) {
+    NOOPT_VAL(ip);
+    return *((uint32_t *) ip);
 }
 #endif
 
@@ -348,8 +416,13 @@ dispatch_loop:
                 assert(ykdstrs[locidx] != NULL);
                 yk_debug_str(ykdstrs[locidx]);
                 #endif
+                ip = (const byte *) yk_promote((byte *) ip);
+                uint32_t ip_word = load_ip_uint32(ip++);
+                byte opcode = ip_word & 0xFF;
+#else
+                byte opcode = *ip++;
 #endif
-                switch (*ip++) {
+                switch (opcode) {
                 #endif
 
                 ENTRY(MP_BC_LOAD_CONST_FALSE):
@@ -365,6 +438,18 @@ dispatch_loop:
                     DISPATCH();
 
                 ENTRY(MP_BC_LOAD_CONST_SMALL_INT): {
+#ifdef USE_YK
+                    // Optimise the common case that the small int is in the
+                    // second byte of `ip_word`.
+                    uint8_t byte = (uint8_t)(ip_word >> 8);
+                    mp_uint_t num = (mp_uint_t)((byte & 0x3f) - (byte & 0x40));
+                    ip++;
+                    // Only multi-byte numbers will go around the body of the following loop.
+                    while (byte & 0x80) {
+                        byte = load_ip_uint8(ip++);
+                        num = (num << 7) | (byte & 0x7f);
+                    }
+#else
                     mp_uint_t num = 0;
                     if ((ip[0] & 0x40) != 0) {
                         // Number is negative
@@ -373,6 +458,7 @@ dispatch_loop:
                     do {
                         num = (num << 7) | (*ip & 0x7f);
                     } while ((*ip++ & 0x80) != 0);
+#endif
                     PUSH(MP_OBJ_NEW_SMALL_INT(num));
                     DISPATCH();
                 }
@@ -880,25 +966,37 @@ unwind_jump:;
                 #if MICROPY_PY_BUILTINS_SLICE
                 ENTRY(MP_BC_BUILD_SLICE): {
                     MARK_EXC_IP_SELECTIVE();
+
+#ifdef USE_YK
+                    uint8_t slice_args = (uint8_t)(ip_word >> 8);
+                    uint8_t next_op = (uint8_t)(ip_word >> 16);
+                    ++ip; // Consume the BUILD_SLICE operand.
+#else
+                    uint8_t slice_args = *ip++;
+                    uint8_t next_op = *ip;
+#endif
+
                     mp_obj_t step = mp_const_none;
-                    if (*ip++ == 3) {
-                        // 3-argument slice includes step
+                    if (slice_args == 3) {
+                        // 3-argument slice includes step.
                         step = POP();
                     }
-                    if ((*ip == MP_BC_LOAD_SUBSCR || *ip == MP_BC_STORE_SUBSCR)
+
+                    if ((next_op == MP_BC_LOAD_SUBSCR || next_op == MP_BC_STORE_SUBSCR)
                         && (mp_obj_get_type(sp[-2])->flags & MP_TYPE_FLAG_SUBSCR_ALLOWS_STACK_SLICE)) {
                         // Fast path optimisation for when the BUILD_SLICE is immediately followed
                         // by a LOAD/STORE_SUBSCR for an accepting type, to avoid needing to allocate
                         // the slice on the heap.  In some cases (e.g. a[1:3] = x) this can result
                         // in no allocations at all.  We can't do this for instance types because
                         // the get/set/delattr implementation may keep a reference to the slice.
-                        byte op = *ip++;
-                        sp = build_slice_stack_allocated(op, sp - 2, step);
+                        ip++;
+                        sp = build_slice_stack_allocated(next_op, sp - 2, step);
                     } else {
                         mp_obj_t stop = POP();
                         mp_obj_t start = TOP();
                         SET_TOP(mp_obj_new_slice(start, stop, step));
                     }
+
                     DISPATCH();
                 }
                 #endif
@@ -954,7 +1052,11 @@ unwind_jump:;
 
                 ENTRY(MP_BC_MAKE_CLOSURE): {
                     DECODE_PTR;
+#ifdef USE_YK
+                    size_t n_closed_over = load_ip_uint8(ip++);
+#else
                     size_t n_closed_over = *ip++;
+#endif
                     // Stack layout: closed_overs <- TOS
                     sp -= n_closed_over - 1;
                     SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, n_closed_over, sp));
@@ -963,7 +1065,11 @@ unwind_jump:;
 
                 ENTRY(MP_BC_MAKE_CLOSURE_DEFARGS): {
                     DECODE_PTR;
+#ifdef USE_YK
+                    size_t n_closed_over = load_ip_uint8(ip++);
+#else
                     size_t n_closed_over = *ip++;
+#endif
                     // Stack layout: def_tuple def_dict closed_overs <- TOS
                     sp -= 2 + n_closed_over - 1;
                     SET_TOP(mp_make_closure_from_proto_fun(ptr, code_state->fun_bc->context, 0x100 | n_closed_over, sp));
@@ -1327,22 +1433,22 @@ yield:
                     MARK_EXC_IP_SELECTIVE();
                 #else
                 ENTRY_DEFAULT:
-                    if (ip[-1] < MP_BC_LOAD_CONST_SMALL_INT_MULTI + MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM) {
-                        PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)ip[-1] - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
+                    if (opcode < MP_BC_LOAD_CONST_SMALL_INT_MULTI + MP_BC_LOAD_CONST_SMALL_INT_MULTI_NUM) {
+                        PUSH(MP_OBJ_NEW_SMALL_INT((mp_int_t)opcode - MP_BC_LOAD_CONST_SMALL_INT_MULTI - MP_BC_LOAD_CONST_SMALL_INT_MULTI_EXCESS));
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_LOAD_FAST_MULTI + MP_BC_LOAD_FAST_MULTI_NUM) {
-                        obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)ip[-1]];
+                    } else if (opcode < MP_BC_LOAD_FAST_MULTI + MP_BC_LOAD_FAST_MULTI_NUM) {
+                        obj_shared = fastn[MP_BC_LOAD_FAST_MULTI - (mp_int_t)opcode];
                         goto load_check;
-                    } else if (ip[-1] < MP_BC_STORE_FAST_MULTI + MP_BC_STORE_FAST_MULTI_NUM) {
-                        fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)ip[-1]] = POP();
+                    } else if (opcode < MP_BC_STORE_FAST_MULTI + MP_BC_STORE_FAST_MULTI_NUM) {
+                        fastn[MP_BC_STORE_FAST_MULTI - (mp_int_t)opcode] = POP();
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_UNARY_OP_MULTI + MP_BC_UNARY_OP_MULTI_NUM) {
-                        SET_TOP(mp_unary_op(ip[-1] - MP_BC_UNARY_OP_MULTI, TOP()));
+                    } else if (opcode < MP_BC_UNARY_OP_MULTI + MP_BC_UNARY_OP_MULTI_NUM) {
+                        SET_TOP(mp_unary_op(opcode - MP_BC_UNARY_OP_MULTI, TOP()));
                         DISPATCH();
-                    } else if (ip[-1] < MP_BC_BINARY_OP_MULTI + MP_BC_BINARY_OP_MULTI_NUM) {
+                    } else if (opcode < MP_BC_BINARY_OP_MULTI + MP_BC_BINARY_OP_MULTI_NUM) {
                         mp_obj_t rhs = POP();
                         mp_obj_t lhs = TOP();
-                        SET_TOP(mp_binary_op(ip[-1] - MP_BC_BINARY_OP_MULTI, lhs, rhs));
+                        SET_TOP(mp_binary_op(opcode - MP_BC_BINARY_OP_MULTI, lhs, rhs));
                         DISPATCH();
                     } else
                 #endif // MICROPY_OPT_COMPUTED_GOTO
@@ -1430,7 +1536,11 @@ exception_handler:
                 // check if it's a StopIteration within a for block
                 if (*code_state->ip == MP_BC_FOR_ITER) {
                     const byte *ip = code_state->ip + 1;
+#ifdef USE_YK
+                    DECODE_ULABEL_FROM_MEM; // the jump offset if iteration finishes; for labels are always forward
+#else
                     DECODE_ULABEL; // the jump offset if iteration finishes; for labels are always forward
+#endif
                     code_state->ip = ip + ulab; // jump to after for-block
                     code_state->sp -= MP_OBJ_ITER_BUF_NSLOTS; // pop the exhausted iterator
                     goto outer_dispatch_loop; // continue with dispatch loop
