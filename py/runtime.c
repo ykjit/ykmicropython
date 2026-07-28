@@ -389,7 +389,24 @@ mp_obj_t mp_unary_op(mp_unary_op_t op, mp_obj_t arg) {
     }
 }
 
-mp_obj_t MICROPY_WRAP_MP_BINARY_OP(mp_binary_op)(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
+mp_obj_t mp_binary_op_contains(mp_obj_t lhs, mp_obj_t rhs) {
+    // If type didn't support containment then explicitly walk the iterator.
+    // mp_getiter will raise the appropriate exception if lhs is not iterable.
+    mp_obj_iter_buf_t iter_buf;
+    mp_obj_t iter = mp_getiter(lhs, &iter_buf);
+    mp_obj_t next;
+    while ((next = mp_iternext(iter)) != MP_OBJ_STOP_ITERATION) {
+        if (mp_obj_equal(next, rhs)) {
+            return mp_const_true;
+        }
+    }
+    return mp_const_false;
+}
+
+#ifdef USE_YK
+__attribute__((yk_indirect_inline, yk_unroll))
+#endif
+mp_obj_t mp_binary_op(mp_binary_op_t op, mp_obj_t lhs, mp_obj_t rhs) {
     DEBUG_OP_printf("binary " UINT_FMT " %q %p %p\n", op, mp_binary_op_method_name[op], lhs, rhs);
 
     // TODO correctly distinguish inplace operators for mutable objects
@@ -672,17 +689,7 @@ generic_binary_op:
     #endif
 
     if (op == MP_BINARY_OP_CONTAINS) {
-        // If type didn't support containment then explicitly walk the iterator.
-        // mp_getiter will raise the appropriate exception if lhs is not iterable.
-        mp_obj_iter_buf_t iter_buf;
-        mp_obj_t iter = mp_getiter(lhs, &iter_buf);
-        mp_obj_t next;
-        while ((next = mp_iternext(iter)) != MP_OBJ_STOP_ITERATION) {
-            if (mp_obj_equal(next, rhs)) {
-                return mp_const_true;
-            }
-        }
-        return mp_const_false;
+        return mp_binary_op_contains(lhs, rhs);
     }
 
 unsupported_op:
