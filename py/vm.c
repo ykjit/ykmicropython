@@ -341,6 +341,22 @@ mp_vm_return_kind_t MICROPY_WRAP_MP_EXECUTE_BYTECODE(mp_execute_bytecode)(mp_cod
 run_code_state: ;
 #endif
 FRAME_ENTER();
+#ifdef USE_YK
+    if (yk_is_interpreting()) {
+        mp_obj_fun_bc_t *fun_bc = code_state->fun_bc;
+        if (fun_bc->called) {
+            size_t locidx = code_state->ip - fun_bc->bytecode;
+            YkLocation *loc = &fun_bc->rc->yklocs[locidx];
+            if (yk_location_is_null(*loc)) {
+                *loc = yk_location_new();
+                #ifdef YKMP_DEBUG_STRS
+                yk_location_set_debug_str(loc, fun_bc->rc->ykdstrs[locidx]);
+                #endif
+            }
+        } else
+            fun_bc->called = true;
+    }
+#endif
 
 #if MICROPY_STACKLESS
 run_code_state_from_return: ;
@@ -1280,6 +1296,10 @@ unwind_return:
                     code_state->sp = sp;
                     assert(exc_sp == exc_stack - 1);
                     MICROPY_VM_HOOK_RETURN
+#ifdef USE_YK
+                    if (yk_is_interpreting())
+                        code_state->fun_bc->called = false;
+#endif
                     #if MICROPY_STACKLESS
                     if (code_state->prev != NULL) {
                         mp_obj_t res = *sp;
@@ -1338,6 +1358,10 @@ yield:
                     code_state->ip = ip;
                     code_state->sp = sp;
                     code_state->exc_sp_idx = MP_CODE_STATE_EXC_SP_IDX_FROM_PTR(exc_stack, exc_sp);
+#ifdef USE_YK
+                    if (yk_is_interpreting())
+                        code_state->fun_bc->called = false;
+#endif
                     FRAME_LEAVE();
                     return MP_VM_RETURN_YIELD;
 
@@ -1456,6 +1480,10 @@ yield:
                     mp_obj_t obj = mp_obj_new_exception_msg(&mp_type_NotImplementedError, MP_ERROR_TEXT("opcode"));
                     nlr_pop();
                     code_state->state[0] = obj;
+#ifdef USE_YK
+                    if (yk_is_interpreting())
+                        code_state->fun_bc->called = false;
+#endif
                     FRAME_LEAVE();
                     return MP_VM_RETURN_EXCEPTION;
                 }
@@ -1616,6 +1644,10 @@ unwind_loop:
 
             #if MICROPY_STACKLESS
             } else if (code_state->prev != NULL) {
+#ifdef USE_YK
+                if (yk_is_interpreting())
+                    code_state->fun_bc->called = false;
+#endif
                 mp_globals_set(code_state->old_globals);
                 mp_code_state_t *new_code_state = code_state->prev;
                 #if MICROPY_ENABLE_PYSTACK
@@ -1638,6 +1670,10 @@ unwind_loop:
                 // propagate exception to higher level
                 // Note: ip and sp don't have usable values at this point
                 code_state->state[0] = MP_OBJ_FROM_PTR(nlr.ret_val); // put exception here because sp is invalid
+#ifdef USE_YK
+                if (yk_is_interpreting())
+                    code_state->fun_bc->called = false;
+#endif
                 FRAME_LEAVE();
                 return MP_VM_RETURN_EXCEPTION;
             }

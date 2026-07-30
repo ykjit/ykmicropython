@@ -37,6 +37,9 @@ typedef struct _mp_obj_fun_bc_t {
     #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
     const struct _mp_raw_code_t *rc;
     #endif
+    #ifdef USE_YK
+    bool called;
+    #endif
     // the following extra_args array is allocated space to take (in order):
     //  - values of positional default args (if any)
     //  - a single slot for default kw args dict (if it has them)
