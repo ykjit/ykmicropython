@@ -432,8 +432,14 @@ dispatch_loop:
                 assert(ykdstrs[locidx] != NULL);
                 yk_debug_str(ykdstrs[locidx]);
                 #endif
-                ip = (const byte *) yk_promote((byte *) ip);
-                uint32_t ip_word = load_ip_uint32(ip++);
+                uint32_t ip_word;
+                if (yk_is_interpreting()) {
+                    ip_word = *((uint32_t *) ip);
+                    ip++;
+                } else {
+                    ip = (const byte *) yk_promote((byte *) ip);
+                    ip_word = load_ip_uint32(ip++);
+                }
                 byte opcode = ip_word & 0xFF;
 #else
                 byte opcode = *ip++;
