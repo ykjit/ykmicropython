@@ -445,6 +445,10 @@ mp_obj_t mp_obj_new_fun_bc(const mp_obj_t *def_args, const byte *code, const mp_
     mp_obj_fun_bc_t *o = mp_obj_malloc_var(mp_obj_fun_bc_t, extra_args, mp_obj_t, n_extra_args, &mp_type_fun_bc);
     o->bytecode = code;
 
+    #ifdef USE_YK
+    o->called = false;
+    #endif
+
     #if MICROPY_PY_SYS_SETTRACE || defined(USE_YK)
     // mp_make_function_from_proto_fun fills this before publishing the object.
     o->rc = NULL;
